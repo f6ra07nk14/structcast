@@ -7,9 +7,10 @@ from functools import partial
 import logging
 from pathlib import Path
 import sys
-from typing import Any, Optional, TypeAlias, Union
+from typing import Any, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, FilePath, TypeAdapter, ValidationError, model_validator
+from typing_extensions import TypeAlias
 
 from structcast.utils.base import import_from_address
 

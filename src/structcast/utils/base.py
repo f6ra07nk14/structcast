@@ -1,11 +1,12 @@
 """Base utility functions for StructCast."""
 
 import importlib
+import importlib.util
 import logging
 from os import PathLike
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from structcast.utils.constants import DEFAULT_ALLOWED_MODULES, DEFAULT_BLOCKED_BUILTINS, DEFAULT_BLOCKED_MODULES
 
@@ -17,7 +18,7 @@ __directories: list[Path] = []
 # Global security settings
 __blocked_modules: set[str] = DEFAULT_BLOCKED_MODULES.copy()
 __blocked_builtins: set[str] = DEFAULT_BLOCKED_BUILTINS.copy()
-__allowed_modules: set[Optional[str]] = DEFAULT_ALLOWED_MODULES.copy()
+__allowed_modules: set[Optional[str]] = cast(set[Optional[str]], DEFAULT_ALLOWED_MODULES.copy())
 
 
 class SecurityError(Exception):
