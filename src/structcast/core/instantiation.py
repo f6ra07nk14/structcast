@@ -160,8 +160,11 @@ class ObjectPattern(BasePattern):
     def build(self, result: PatternResult) -> PatternResult:
         """Build the runnable from the pattern."""
         new = type(result)()
-        for ptn in TypeAdapter(list[PatternLike]).validate_python(self.object):
-            new = ptn.build(new)
+        try:
+            for ptn in TypeAdapter(list[PatternLike]).validate_python(self.object):
+                new = ptn.build(new)
+        except ValidationError as err:
+            raise InstantiationError(f"Failed to validate ObjectPattern contents: {err.errors()}") from err
         if len(new.runs) != 1:
             msg = f"ObjectPattern did not result in a single object (got {new.runs}): {new.patterns}"
             raise InstantiationError(msg)
