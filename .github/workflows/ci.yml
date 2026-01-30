@@ -131,8 +131,10 @@ jobs:
           fi
 
       - name: Set up Docker Buildx
-        if: steps.should-build.outputs.build == 'true'
+        if: steps.should-build.outputs[format('build-{0}', matrix.python-version)] == 'true' || steps.check-image.outputs.exists == 'false'
         uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=moby/buildkit:latest
 
       - name: Extract metadata for Docker
         if: steps.should-build.outputs[format('build-{0}', matrix.python-version)] == 'true' || steps.check-image.outputs.exists == 'false'
