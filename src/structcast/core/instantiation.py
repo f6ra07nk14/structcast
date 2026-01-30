@@ -6,20 +6,20 @@ from dataclasses import dataclass, field
 from functools import partial
 import logging
 from pathlib import Path
+import sys
 from typing import Any, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from structcast.utils.base import import_from_address
 
-logger = logging.getLogger(__name__)
+__logger = logging.getLogger(__name__)
+
+# check python version to support kw_only and slots in dataclass
+__dataclass_kw = {"kw_only": True, "slots": True} if sys.version_info >= (3, 10) else {}
 
 
-class InstantiationError(Exception):
-    """Exception raised for errors during instantiation."""
-
-
-@dataclass(kw_only=True, slots=True, frozen=True)
+@dataclass(**__dataclass_kw, frozen=True)
 class PatternResult:
     """Result of pattern matching."""
 
@@ -28,6 +28,10 @@ class PatternResult:
 
     runs: list[Any] = field(default_factory=list)
     """The list of instantiated objects."""
+
+
+class InstantiationError(Exception):
+    """Exception raised for errors during instantiation."""
 
 
 class BasePattern(BaseModel, abc.ABC):
@@ -182,5 +186,5 @@ def instantiate(cfg: Any) -> Any:
         return {k: instantiate(v) for k, v in cfg.items()}
     if isinstance(cfg, (list, tuple)):
         return [instantiate(v) for v in cfg]
-    logger.warning(f"Unrecognized configuration type ({type(cfg)}). Returning as is.")
+    __logger.warning(f"Unrecognized configuration type ({type(cfg)}). Returning as is.")
     return cfg

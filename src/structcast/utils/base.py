@@ -7,9 +7,49 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, Optional
 
-logger = logging.getLogger(__name__)
+from structcast.utils.constants import DEFAULT_BLOCKED_BUILTINS, DEFAULT_BLOCKED_MODULES
 
+__logger = logging.getLogger(__name__)
+
+# Registered directories for module searching
 __directories: list[Path] = []
+
+# Global security settings
+__blocked_modules: set[str] = DEFAULT_BLOCKED_MODULES.copy()
+__blocked_builtins: set[str] = DEFAULT_BLOCKED_BUILTINS.copy()
+__allowed_modules: set[Optional[str]] = {None}
+
+
+class SecurityError(Exception):
+    """Exception raised when a security check fails."""
+
+
+def configure_security(
+    blocked_modules: Optional[set[str]] = None,
+    blocked_builtins: Optional[set[str]] = None,
+    allowed_modules: Optional[set[str]] = None,
+) -> None:
+    """Configure security settings for import_from_address.
+
+    Args:
+        blocked_modules (Optional[set[str]]): Set of module names to block.
+            If None, uses DEFAULT_BLOCKED_MODULES.
+        blocked_builtins (Optional[set[str]]): Set of builtin names to block.
+            If None, uses DEFAULT_BLOCKED_BUILTINS.
+        allowed_modules (Optional[set[str]]): If provided, only these modules are allowed (allowlist mode).
+            If None, all modules except blocked ones are allowed (blocklist mode).
+    """
+    if blocked_modules is not None:
+        __blocked_modules.clear()
+        __blocked_modules.update(blocked_modules)
+    if blocked_builtins is not None:
+        __blocked_builtins.clear()
+        __blocked_builtins.update(blocked_builtins)
+    __allowed_modules.clear()
+    if allowed_modules is None:
+        __allowed_modules.add(None)  # Allow all modules except blocked ones
+    else:
+        __allowed_modules.update(allowed_modules)
 
 
 def register_dir(path: PathLike) -> None:
@@ -22,7 +62,7 @@ def register_dir(path: PathLike) -> None:
         path = Path(path)
     path = path.resolve(strict=True)
     if path in __directories:
-        logger.warning(f"Directory is already registered. Skip registering: {path}")
+        __logger.warning(f"Directory is already registered. Skip registering: {path}")
     else:
         __directories.append(path)
 
@@ -66,11 +106,31 @@ def load_module(module_name: str, module_file: PathLike) -> ModuleType:
     return module
 
 
+def _validate_import(module_name: str, target: str) -> None:
+    """Validate that an import is safe.
+
+    Args:
+        module_name (str): The module name to import from.
+        target (str): The target name to import.
+
+    Raises:
+        SecurityError: If the import is blocked by security settings.
+    """
+    names = module_name.split(".")
+    if None not in __allowed_modules and names[0] not in __allowed_modules:
+        raise SecurityError(f'Module "{module_name}.{target}" is not in the allowlist.')
+    if any(n in __blocked_modules for n in names):
+        raise SecurityError(f'Module "{module_name}.{target}" is blocked.')
+    if module_name == "builtins" and target in __blocked_builtins:
+        raise SecurityError(f'Builtin "{target}" is blocked.')
+
+
 def import_from_address(
     address: str,
     *,
     default_module: Optional[ModuleType] = None,
     module_file: Optional[PathLike] = None,
+    security_check: bool = True,
 ) -> Any:
     """Import target from address.
 
@@ -79,14 +139,23 @@ def import_from_address(
     it defaults to the `default_module` provided. If `module_file` is provided,
     the module will be loaded from the specified file.
 
+    Security: By default, this function blocks importing from dangerous modules (os, subprocess, etc.)
+    and dangerous builtins (eval, exec, etc.) to prevent injection attacks. Use configure_security()
+    to customize the security settings.
+
     Args:
         address (str): The address of the class or function to import, in the form of "module.class" or "class".
         default_module (Optional[ModuleType]): The default module to use if the module is not specified in the address.
             Default is None, which means the built-in module will be used.
         module_file (Optional[PathLike]): Optional path to a module file to load the module from.
+        security_check (bool): If True, performs security checks. Use with extreme caution. Default is True.
 
     Returns:
         Any: The imported target.
+
+    Raises:
+        SecurityError: If the import is blocked by security settings.
+        ImportError: If the target cannot be imported.
     """
     if "." in address:
         index = address.rindex(".")
@@ -103,6 +172,8 @@ def import_from_address(
         module = importlib.import_module("builtins")
     else:
         module = default_module
+    if security_check:
+        _validate_import(module.__name__, target)
     if hasattr(module, target):
         return getattr(module, target)
     raise ImportError(f'Target "{target}" not found in module "{module.__name__}".')
