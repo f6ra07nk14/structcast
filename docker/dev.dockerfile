@@ -1,11 +1,9 @@
 # Use Python base image
-FROM python:3.11-slim
+ARG PY_VERSION=3.9
+FROM ghcr.io/astral-sh/uv:python${PY_VERSION}-bookworm-slim
 
 # Set working directory
 WORKDIR /app
-
-# Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Install dependencies using uv sync (recommended method)
 RUN --mount=type=bind,source=uv.lock,target=uv.lock \
