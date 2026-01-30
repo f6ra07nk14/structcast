@@ -26,19 +26,6 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
-    outputs:
-      should-build-3-9: ${{ steps.should-build.outputs.build-3-9 }}
-      should-build-3-10: ${{ steps.should-build.outputs.build-3-10 }}
-      should-build-3-11: ${{ steps.should-build.outputs.build-3-11 }}
-      should-build-3-12: ${{ steps.should-build.outputs.build-3-12 }}
-      should-build-3-13: ${{ steps.should-build.outputs.build-3-13 }}
-      should-build-3-14: ${{ steps.should-build.outputs.build-3-14 }}
-      image-tag-3-9: ${{ steps.determine-tag.outputs.tag-3-9 }}
-      image-tag-3-10: ${{ steps.determine-tag.outputs.tag-3-10 }}
-      image-tag-3-11: ${{ steps.determine-tag.outputs.tag-3-11 }}
-      image-tag-3-12: ${{ steps.determine-tag.outputs.tag-3-12 }}
-      image-tag-3-13: ${{ steps.determine-tag.outputs.tag-3-13 }}
-      image-tag-3-14: ${{ steps.determine-tag.outputs.tag-3-14 }}
 
     steps:
       - name: Checkout code
@@ -124,20 +111,23 @@ jobs:
 
           if [ "${DOCKER_CHANGED}" = "true" ] || [ "${IMAGE_EXISTS}" = "false" ]; then
             echo "build-${PY_VERSION_NORMALIZED}=true" >> $GITHUB_OUTPUT
+            echo "build-needed=true" >> $GITHUB_OUTPUT
             echo "✓ Build required for Python ${PY_VERSION} (Docker changed: ${DOCKER_CHANGED}, Image exists: ${IMAGE_EXISTS})"
           else
             echo "build-${PY_VERSION_NORMALIZED}=false" >> $GITHUB_OUTPUT
+            echo "build-needed=false" >> $GITHUB_OUTPUT
             echo "✓ Build not required for Python ${PY_VERSION} (Docker changed: ${DOCKER_CHANGED}, Image exists: ${IMAGE_EXISTS})"
           fi
+          echo "py-version-normalized=${PY_VERSION_NORMALIZED}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
-        if: steps.should-build.outputs[format('build-{0}', matrix.python-version)] == 'true' || steps.check-image.outputs.exists == 'false'
+        if: steps.should-build.outputs.build-needed == 'true' || steps.check-image.outputs.exists == 'false'
         uses: docker/setup-buildx-action@v3
         with:
           driver-opts: image=moby/buildkit:latest
 
       - name: Extract metadata for Docker
-        if: steps.should-build.outputs[format('build-{0}', matrix.python-version)] == 'true' || steps.check-image.outputs.exists == 'false'
+        if: steps.should-build.outputs.build-needed == 'true' || steps.check-image.outputs.exists == 'false'
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -151,7 +141,7 @@ jobs:
           # {{sha}} is automatically truncated to 7 characters by the metadata action
 
       - name: Build and push Docker image
-        if: steps.should-build.outputs[format('build-{0}', matrix.python-version)] == 'true' || steps.check-image.outputs.exists == 'false'
+        if: steps.should-build.outputs.build-needed == 'true' || steps.check-image.outputs.exists == 'false'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -164,33 +154,26 @@ jobs:
           cache-from: type=gha,scope=py${{ matrix.python-version }}
           cache-to: type=gha,mode=max,scope=py${{ matrix.python-version }}
 
-      - name: Determine image tag to use
-        id: determine-tag
+      - name: Log build summary
         run: |
           BRANCH_NAME="${{ steps.branch-name.outputs.sanitized }}"
-          SHA="${{ github.sha }}"
           PY_VERSION="${{ matrix.python-version }}"
-          PY_VERSION_NORMALIZED="${PY_VERSION//./-}"
-
-          if [ "${{ steps.should-build.outputs[format('build-{0}', matrix.python-version)] }}" = "true" ]; then
-            # Use the newly built image with branch-sha tag
-            # The metadata action uses short SHA (7 chars) for {{sha}} template
-            # We truncate github.sha (40 chars) to match: ${SHA:0:7}
-            SHORT_SHA="${SHA:0:7}"
-            TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${BRANCH_NAME}-py${PY_VERSION}-${SHORT_SHA}"
-          else
-            # Use the branch-latest tag if no build was needed
-            TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${BRANCH_NAME}-py${PY_VERSION}-latest"
-          fi
-          echo "tag-${PY_VERSION_NORMALIZED}=${TAG}" >> $GITHUB_OUTPUT
-          echo "Using image tag: ${TAG}"
-          echo "Branch: ${BRANCH_NAME}, Python: ${PY_VERSION}, SHA: ${SHORT_SHA:-latest}"
+          BUILD_NEEDED="${{ steps.should-build.outputs.build-needed }}"
+          
+          echo "=== Build Summary ==="
+          echo "Branch: ${BRANCH_NAME}"
+          echo "Python: ${PY_VERSION}"
+          echo "Build performed: ${BUILD_NEEDED}"
+          echo "Latest tag: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${BRANCH_NAME}-py${PY_VERSION}-latest"
+          echo "====================="
 
       - name: Verify Docker image
         run: |
-          IMAGE_TAG="${{ steps.determine-tag.outputs[format('tag-{0}', matrix.python-version)] }}"
+          BRANCH_NAME="${{ steps.branch-name.outputs.sanitized }}"
+          PY_VERSION="${{ matrix.python-version }}"
+          IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${BRANCH_NAME}-py${PY_VERSION}-latest"
+          
           echo "Verifying image: ${IMAGE_TAG}"
-
           if docker pull "${IMAGE_TAG}" 2>/dev/null; then
             echo "✓ Docker image exists and is accessible: ${IMAGE_TAG}"
           else
@@ -208,61 +191,32 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+    
     container:
-      image: ${{ needs.build-docker.outputs[format('image-tag-{0}', matrix.python-version)] }}
+      image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}-py${{ matrix.python-version }}-latest
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Display Python version
+      - name: Run tests
         run: |
+          echo "=== Python Version ==="
           python --version
-          echo "Testing with Python ${{ matrix.python-version }}"
-
-      - name: Run code quality checks
-        id: quality-checks
-        run: |
-          echo "Running code quality checks"
-
-          # Check code formatting
-          echo "Checking code formatting with ruff..."
+          
+          echo ""
+          echo "=== Code Quality Checks ==="
           ruff format --check src/ tests/
-
-          # Run linting
-          echo "Running linting with ruff..."
           ruff check src/ tests/
-
-          # Run type checking
-          echo "Running type checking with mypy..."
-          mypy src/ 
+          mypy src/
           mypy tests/
-
-      - name: Run pytest
-        id: run-tests
-        run: echo "Running tests" && pytest
-
-      - name: Test summary
-        if: always()
-        run: |
-          QUALITY_STATUS="${{ steps.quality-checks.outcome }}"
-          TEST_STATUS="${{ steps.run-tests.outcome }}"
-
-          echo "=== Test Results Summary (Python ${{ matrix.python-version }}) ==="
-          echo "Code Quality Checks: ${QUALITY_STATUS}"
-          echo "Pytest Tests: ${TEST_STATUS}"
-
-          if [ "${QUALITY_STATUS}" = "success" ] && [ "${TEST_STATUS}" = "success" ]; then
-            echo "✓ All checks passed successfully for Python ${{ matrix.python-version }}"
-          else
-            echo "✗ Some checks failed for Python ${{ matrix.python-version }}"
-            [ "${QUALITY_STATUS}" != "success" ] && echo "  - Code quality checks failed"
-            [ "${TEST_STATUS}" != "success" ] && echo "  - Tests failed"
-            exit 1
-          fi
+          
+          echo ""
+          echo "=== Running Tests ==="
+          pytest
 
   # Cleanup Job: Delete Docker images for feature branches after successful PR merge
   cleanup-images:
