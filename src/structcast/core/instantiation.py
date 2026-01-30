@@ -7,9 +7,9 @@ from functools import partial
 import logging
 from pathlib import Path
 import sys
-from typing import Any, Optional, Union
+from typing import Any, Optional, TypeAlias, Union
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, FilePath, TypeAdapter, ValidationError, model_validator
 
 from structcast.utils.base import import_from_address
 
@@ -54,22 +54,22 @@ class BasePattern(BaseModel, abc.ABC):
 class AddressPattern(BasePattern):
     """Pattern for matching addresses."""
 
-    address: str = Field(alias="_addr_")
+    address: str = Field(alias="_addr_", min_length=1)
     """The address to import."""
 
-    module_file: Optional[Path] = Field(None, alias="_file_")
+    file: Optional[FilePath] = Field(None, alias="_file_")
     """Optional path to the module file."""
 
     def build(self, result: PatternResult) -> PatternResult:
         """Build the objects from the pattern."""
-        runs = result.runs + [import_from_address(self.address, module_file=self.module_file)]
+        runs = result.runs + [import_from_address(self.address, module_file=self.file)]
         return type(result)(patterns=result.patterns + [self], runs=runs)
 
 
 class AttributePattern(BasePattern):
     """Pattern for accessing attributes."""
 
-    attribute: str = Field(alias="_attr_")
+    attribute: str = Field(alias="_attr_", min_length=1)
     """The attribute to access."""
 
     def build(self, result: PatternResult) -> PatternResult:
@@ -91,7 +91,7 @@ class CallPattern(BasePattern):
 
     @model_validator(mode="before")
     @classmethod
-    def validate_call(cls, data: Any) -> Any:
+    def validate_raw(cls, data: Any) -> Any:
         """Validate the call data."""
         if isinstance(data, str):
             if data == "_call_":
@@ -106,45 +106,35 @@ class CallPattern(BasePattern):
         runs, last = result.runs[:-1], result.runs[-1]
         if callable(last):
             return type(result)(patterns=result.patterns + [self], runs=runs + [last(**instantiate(self.call))])
-        raise InstantiationError(f"Last object is not callable: {last}")
+        raise InstantiationError(f"Object ({last}) is not callable with previous patterns: {result.patterns}")
 
 
-class PartialCallPattern(BasePattern):
+class BindPattern(BasePattern):
     """Pattern for partially calling callables."""
 
-    call: Mapping[str, Any] = Field(alias="_partial_")
-    """The call arguments."""
-
-    @model_validator(mode="before")
-    @classmethod
-    def validate_call(cls, data: Any) -> Any:
-        """Validate the call data."""
-        if isinstance(data, str):
-            if data == "_partial_":
-                return {"_partial_": {}}
-            raise ValueError(f"Invalid partial call pattern: {data}")
-        return data
+    bind: Mapping[str, Any] = Field(alias="_bind_", min_length=1)
+    """The binding arguments."""
 
     def build(self, result: PatternResult) -> PatternResult:
         """Build the objects from the pattern."""
         if not result.runs:
-            raise InstantiationError("No object to partially call.")
+            raise InstantiationError("No object to bind.")
         runs, last = result.runs[:-1], result.runs[-1]
         if callable(last):
-            run = partial(last, **instantiate(self.call))
+            run = partial(last, **instantiate(self.bind))
             return type(result)(patterns=result.patterns + [self], runs=runs + [run])
-        raise InstantiationError(f"Last object is not callable: {last}")
+        raise InstantiationError(f"Object ({last}) is not callable with previous patterns: {result.patterns}")
 
 
 class ObjectPattern(BasePattern):
     """Pattern for creating objects."""
 
-    object: list[Union[AddressPattern, AttributePattern, CallPattern, PartialCallPattern]] = Field(alias="_obj_")
+    object: list[Any] = Field(alias="_obj_", min_length=1)
     """The list of patterns to create the object."""
 
     @model_validator(mode="before")
     @classmethod
-    def validate_object(cls, data: Any) -> Any:
+    def validate_raw(cls, data: Any) -> Any:
         """Validate the object data."""
         if isinstance(data, (list, tuple)) and data and data[0] == "_obj_":
             return {"_obj_": data[1:]}
@@ -153,12 +143,15 @@ class ObjectPattern(BasePattern):
     def build(self, result: PatternResult) -> PatternResult:
         """Build the runnable from the pattern."""
         new = type(result)()
-        for ptn in self.object:
+        for ptn in TypeAdapter(list[PatternLike]).validate_python(self.object):
             new = ptn.build(new)
         if len(new.runs) != 1:
             msg = f"ObjectPattern did not result in a single object (got {new.runs}): {new.patterns}"
             raise InstantiationError(msg)
         return type(result)(patterns=result.patterns + [self], runs=result.runs + new.runs)
+
+
+PatternLike: TypeAlias = Union[AddressPattern, AttributePattern, CallPattern, BindPattern, ObjectPattern]
 
 
 def instantiate(cfg: Any) -> Any:
