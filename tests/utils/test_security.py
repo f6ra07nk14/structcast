@@ -1,15 +1,32 @@
 """Tests for security features in import_from_address."""
 
-from collections.abc import Generator, Iterable
+from collections.abc import Generator
 from contextlib import contextmanager
-import json
 import math
-from typing import List, Optional
+from typing import Optional
 
 import pytest
 
-from structcast.utils.base import SecurityError, configure_security, get_security_settings, import_from_address
+from structcast.utils.base import SecurityError, configure_security, import_from_address
 from structcast.utils.constants import DEFAULT_BLOCKED_BUILTINS, DEFAULT_BLOCKED_MODULES
+
+
+@contextmanager
+def configure_security_context(
+    blocked_modules: Optional[set[str]] = None,
+    blocked_builtins: Optional[set[str]] = None,
+    allowed_modules: Optional[set[str]] = None,
+) -> Generator[None, None, None]:
+    """Context manager to temporarily configure security settings."""
+    try:
+        configure_security(
+            allowed_modules=allowed_modules,
+            blocked_modules=blocked_modules,
+            blocked_builtins=blocked_builtins,
+        )
+        yield
+    finally:
+        configure_security()
 
 
 class TestSecurityBlocking:
@@ -17,13 +34,15 @@ class TestSecurityBlocking:
 
     def test_block_os_module(self) -> None:
         """Test that os module is blocked."""
-        with pytest.raises(SecurityError, match="os.*blocked"):
-            import_from_address("os.system")
+        with configure_security_context(allowed_modules={None}):
+            with pytest.raises(SecurityError, match="os.*blocked"):
+                import_from_address("os.system")
 
     def test_block_subprocess_module(self) -> None:
         """Test that subprocess module is blocked."""
-        with pytest.raises(SecurityError, match="subprocess.*blocked"):
-            import_from_address("subprocess.run")
+        with configure_security_context(allowed_modules={None}):
+            with pytest.raises(SecurityError, match="subprocess.*blocked"):
+                import_from_address("subprocess.run")
 
     def test_block_eval_builtin(self) -> None:
         """Test that eval builtin is blocked."""
@@ -61,41 +80,13 @@ class TestSecurityAllowedImports:
         assert import_from_address("list") is list
         assert import_from_address("dict") is dict
 
-    def test_allow_safe_modules(self) -> None:
-        """Test that safe modules like math, json are allowed."""
-        assert import_from_address("math.sqrt") is math.sqrt
-        assert import_from_address("json.loads") is json.loads
-
-    def test_allow_typing_module(self) -> None:
-        """Test that typing module is allowed."""
-        assert import_from_address("typing.List") is List
-
-
-@contextmanager
-def configure_security_context(
-    blocked_modules: Optional[set[str]] = None,
-    blocked_builtins: Optional[set[str]] = None,
-    allowed_modules: Optional[set[str]] = None,
-) -> Generator[None, None, None]:
-    """Context manager to temporarily configure security settings."""
-    default_settings = get_security_settings()
-    try:
-        configure_security(
-            allowed_modules=allowed_modules,
-            blocked_modules=blocked_modules,
-            blocked_builtins=blocked_builtins,
-        )
-        yield
-    finally:
-        configure_security(**default_settings)
-
 
 class TestSecurityConfiguration:
     """Test security configuration options."""
 
     def test_custom_blocked_modules(self) -> None:
         """Test custom blocked modules."""
-        with configure_security_context(blocked_modules={"json"}):
+        with configure_security_context(allowed_modules={None}, blocked_modules={"json"}):
             with pytest.raises(SecurityError, match="json.*blocked"):
                 import_from_address("json.loads")
 
@@ -126,15 +117,11 @@ class TestSecurityEdgeCases:
         with pytest.raises(SecurityError, match="os"):
             import_from_address("os.path.join")
 
-    def test_safe_nested_modules(self) -> None:
-        """Test that nested safe modules work."""
-        assert import_from_address("collections.abc.Iterable") is Iterable
-
     def test_error_message_includes_blocked_module(self) -> None:
         """Test that error message is informative."""
-        with pytest.raises(SecurityError) as exc_info:
-            import_from_address("subprocess.Popen")
-
+        with configure_security_context(allowed_modules={None}):
+            with pytest.raises(SecurityError) as exc_info:
+                import_from_address("subprocess.Popen")
         assert "subprocess" in str(exc_info.value)
         assert "blocked" in str(exc_info.value).lower()
 

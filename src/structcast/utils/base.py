@@ -7,7 +7,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, Optional
 
-from structcast.utils.constants import DEFAULT_BLOCKED_BUILTINS, DEFAULT_BLOCKED_MODULES
+from structcast.utils.constants import DEFAULT_ALLOWED_MODULES, DEFAULT_BLOCKED_BUILTINS, DEFAULT_BLOCKED_MODULES
 
 __logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ __directories: list[Path] = []
 # Global security settings
 __blocked_modules: set[str] = DEFAULT_BLOCKED_MODULES.copy()
 __blocked_builtins: set[str] = DEFAULT_BLOCKED_BUILTINS.copy()
-__allowed_modules: set[Optional[str]] = {None}
+__allowed_modules: set[Optional[str]] = DEFAULT_ALLOWED_MODULES.copy()
 
 
 class SecurityError(Exception):
@@ -27,29 +27,22 @@ class SecurityError(Exception):
 def configure_security(
     blocked_modules: Optional[set[str]] = None,
     blocked_builtins: Optional[set[str]] = None,
-    allowed_modules: Optional[set[str]] = None,
+    allowed_modules: Optional[set[Optional[str]]] = None,
 ) -> None:
     """Configure security settings for import_from_address.
 
     Args:
-        blocked_modules (Optional[set[str]]): Set of module names to block.
-            If None, uses DEFAULT_BLOCKED_MODULES.
-        blocked_builtins (Optional[set[str]]): Set of builtin names to block.
-            If None, uses DEFAULT_BLOCKED_BUILTINS.
-        allowed_modules (Optional[set[str]]): If provided, only these modules are allowed (allowlist mode).
-            If None, all modules except blocked ones are allowed (blocklist mode).
+        blocked_modules (Optional[set[str]]): Set of module names to block. If None, uses default blocked modules.
+        blocked_builtins (Optional[set[str]]): Set of builtin names to block. If None, uses default blocked builtins.
+        allowed_modules (Optional[set[Optional[str]]]): If provided, only these modules are allowed (allowlist mode).
+            If None, uses default allowed modules. If set contains None, all modules are allowed.
     """
-    if blocked_modules is not None:
-        __blocked_modules.clear()
-        __blocked_modules.update(blocked_modules)
-    if blocked_builtins is not None:
-        __blocked_builtins.clear()
-        __blocked_builtins.update(blocked_builtins)
+    __blocked_modules.clear()
+    __blocked_modules.update(blocked_modules or DEFAULT_BLOCKED_MODULES)
+    __blocked_builtins.clear()
+    __blocked_builtins.update(blocked_builtins or DEFAULT_BLOCKED_BUILTINS)
     __allowed_modules.clear()
-    if allowed_modules is None:
-        __allowed_modules.add(None)  # Allow all modules except blocked ones
-    else:
-        __allowed_modules.update(allowed_modules)
+    __allowed_modules.update(allowed_modules or DEFAULT_ALLOWED_MODULES)
 
 
 def get_security_settings() -> dict[str, Any]:

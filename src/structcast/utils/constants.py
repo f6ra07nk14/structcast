@@ -1,5 +1,7 @@
 """Constants for StructCast utilities."""
 
+DEFAULT_ALLOWED_MODULES: set[str] = {"builtins", "structcast"}
+
 # Security: Dangerous modules that should be blocked by default
 DEFAULT_BLOCKED_MODULES = {
     # --- System & Process Management ---
