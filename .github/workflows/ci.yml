@@ -2,12 +2,12 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [ main, dev ]
+    branches: [main, dev]
     tags:
-      - 'v*'
+      - "v*"
   pull_request:
-    types: [ opened, synchronize, reopened, closed ]
-    branches: [ main, dev ]
+    types: [opened, synchronize, reopened, closed]
+    branches: [main, dev]
 
 env:
   REGISTRY: ghcr.io
@@ -25,7 +25,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13', '3.14']
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
     outputs:
       should-build-3-9: ${{ steps.should-build.outputs.build-3-9 }}
       should-build-3-10: ${{ steps.should-build.outputs.build-3-10 }}
@@ -105,7 +105,7 @@ jobs:
           PY_VERSION="${{ matrix.python-version }}"
           IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${BRANCH_NAME}-py${PY_VERSION}-latest"
           echo "Checking for image: ${IMAGE_TAG}"
-          
+
           if docker pull "${IMAGE_TAG}" 2>/dev/null; then
             echo "exists=true" >> $GITHUB_OUTPUT
             echo "✓ Docker image ${IMAGE_TAG} exists"
@@ -121,7 +121,7 @@ jobs:
           IMAGE_EXISTS="${{ steps.check-image.outputs.exists }}"
           PY_VERSION="${{ matrix.python-version }}"
           PY_VERSION_NORMALIZED="${PY_VERSION//./-}"
-          
+
           if [ "${DOCKER_CHANGED}" = "true" ] || [ "${IMAGE_EXISTS}" = "false" ]; then
             echo "build-${PY_VERSION_NORMALIZED}=true" >> $GITHUB_OUTPUT
             echo "✓ Build required for Python ${PY_VERSION} (Docker changed: ${DOCKER_CHANGED}, Image exists: ${IMAGE_EXISTS})"
@@ -169,7 +169,7 @@ jobs:
           SHA="${{ github.sha }}"
           PY_VERSION="${{ matrix.python-version }}"
           PY_VERSION_NORMALIZED="${PY_VERSION//./-}"
-          
+
           if [ "${{ steps.should-build.outputs[format('build-{0}', matrix.python-version)] }}" = "true" ]; then
             # Use the newly built image with branch-sha tag
             # The metadata action uses short SHA (7 chars) for {{sha}} template
@@ -188,7 +188,7 @@ jobs:
         run: |
           IMAGE_TAG="${{ steps.determine-tag.outputs.tag }}"
           echo "Verifying image: ${IMAGE_TAG}"
-          
+
           if docker pull "${IMAGE_TAG}" 2>/dev/null; then
             echo "✓ Docker image exists and is accessible: ${IMAGE_TAG}"
           else
@@ -205,7 +205,7 @@ jobs:
       packages: read
     strategy:
       matrix:
-        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13', '3.14']
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
     container:
       image: ${{ needs.build-docker.outputs[format('image-tag-{0}', matrix.python-version)] }}
       credentials:
@@ -225,15 +225,15 @@ jobs:
         id: quality-checks
         run: |
           echo "Running code quality checks"
-          
+
           # Check code formatting
           echo "Checking code formatting with ruff..."
           ruff format --check src/ tests/
-          
+
           # Run linting
           echo "Running linting with ruff..."
           ruff check src/ tests/
-          
+
           # Run type checking
           echo "Running type checking with mypy..."
           mypy src/ 
@@ -248,11 +248,11 @@ jobs:
         run: |
           QUALITY_STATUS="${{ steps.quality-checks.outcome }}"
           TEST_STATUS="${{ steps.run-tests.outcome }}"
-          
+
           echo "=== Test Results Summary (Python ${{ matrix.python-version }}) ==="
           echo "Code Quality Checks: ${QUALITY_STATUS}"
           echo "Pytest Tests: ${TEST_STATUS}"
-          
+
           if [ "${QUALITY_STATUS}" = "success" ] && [ "${TEST_STATUS}" = "success" ]; then
             echo "✓ All checks passed successfully for Python ${{ matrix.python-version }}"
           else
@@ -268,7 +268,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       packages: write
-    
+
     steps:
       - name: Determine branch name
         id: branch-name
@@ -278,7 +278,7 @@ jobs:
           SANITIZED_BRANCH_NAME="${BRANCH_NAME//\//-}"
           echo "sanitized=${SANITIZED_BRANCH_NAME}" >> $GITHUB_OUTPUT
           echo "Branch: ${BRANCH_NAME} (sanitized: ${SANITIZED_BRANCH_NAME})"
-          
+
           # Check if this is a feature branch (not dev or main)
           if [ "${BRANCH_NAME}" != "dev" ] && [ "${BRANCH_NAME}" != "main" ]; then
             echo "is_feature_branch=true" >> $GITHUB_OUTPUT
@@ -294,21 +294,21 @@ jobs:
           BRANCH_NAME="${{ steps.branch-name.outputs.sanitized }}"
           REPO_OWNER="${{ github.repository_owner }}"
           REPO_NAME="${{ github.event.repository.name }}"
-          
+
           echo "Cleaning up Docker images for feature branch: ${BRANCH_NAME}"
-          
+
           # Get package versions for this branch
           PACKAGE_URL="https://api.github.com/users/${REPO_OWNER}/packages/container/${REPO_NAME}/versions"
-          
+
           # Use GitHub CLI to list and delete images
           # Delete both -latest and -sha tagged images for this branch (all Python versions)
           echo "Searching for images with tags matching: ${BRANCH_NAME}-py*"
-          
+
           # Get all versions
           VERSIONS=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
                           -H "Accept: application/vnd.github+json" \
                           "${PACKAGE_URL}" | jq -r '.[] | select(.metadata.container.tags[] | test("^'${BRANCH_NAME}'-py[0-9.]+")) | .id')
-          
+
           if [ -z "$VERSIONS" ]; then
             echo "No images found for branch ${BRANCH_NAME}"
           else
@@ -340,19 +340,19 @@ jobs:
         run: |
           REPO_OWNER="${{ github.repository_owner }}"
           REPO_NAME="${{ github.event.repository.name }}"
-          
+
           echo "Cleaning up untagged Docker images"
-          
+
           # Get package versions for this repository
           PACKAGE_URL="https://api.github.com/users/${REPO_OWNER}/packages/container/${REPO_NAME}/versions"
-          
+
           # Find all untagged versions (versions with empty tags array)
           echo "Searching for untagged images..."
-          
+
           UNTAGGED_VERSIONS=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
                                    -H "Accept: application/vnd.github+json" \
                                    "${PACKAGE_URL}" | jq -r '.[] | select(.metadata.container.tags | length == 0) | .id')
-          
+
           if [ -z "$UNTAGGED_VERSIONS" ]; then
             echo "No untagged images found"
           else
@@ -380,7 +380,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    
+
     steps:
       - name: Determine branch name
         id: branch-name
@@ -388,7 +388,7 @@ jobs:
           BRANCH_NAME="${{ github.head_ref }}"
           echo "name=${BRANCH_NAME}" >> $GITHUB_OUTPUT
           echo "Branch: ${BRANCH_NAME}"
-          
+
           # Check if this is a feature branch (not dev or main)
           if [ "${BRANCH_NAME}" != "dev" ] && [ "${BRANCH_NAME}" != "main" ]; then
             echo "is_feature_branch=true" >> $GITHUB_OUTPUT
@@ -403,15 +403,15 @@ jobs:
         run: |
           BRANCH_NAME="${{ steps.branch-name.outputs.name }}"
           REPO="${{ github.repository }}"
-          
+
           echo "Deleting branch: ${BRANCH_NAME}"
-          
+
           # Delete the branch using GitHub API
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
                -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
                -H "Accept: application/vnd.github+json" \
                "https://api.github.com/repos/${REPO}/git/refs/heads/${BRANCH_NAME}")
-          
+
           if [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "200" ]; then
             echo "✓ Successfully deleted branch: ${BRANCH_NAME} (HTTP ${HTTP_CODE})"
           else
@@ -440,7 +440,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
 
       - name: Install semantic-release
         run: |
@@ -519,4 +519,3 @@ jobs:
           else
             echo "Dev branch does not exist, skipping back-merge"
           fi
-
