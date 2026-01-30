@@ -9,10 +9,19 @@ from pathlib import Path
 import sys
 from typing import Any, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, FilePath, TypeAdapter, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    FilePath,
+    TypeAdapter,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 from typing_extensions import TypeAlias
 
-from structcast.utils.base import import_from_address
+from structcast.utils.base import import_from_address, validate_attribute
 
 __logger = logging.getLogger(__name__)
 
@@ -72,6 +81,13 @@ class AttributePattern(BasePattern):
 
     attribute: str = Field(alias="_attr_", min_length=1)
     """The attribute to access."""
+
+    @field_validator("attribute", mode="after")
+    @classmethod
+    def validate_attribute(cls, attribute: str) -> str:
+        """Validate the attribute name."""
+        validate_attribute(attribute)
+        return attribute
 
     def build(self, result: PatternResult) -> PatternResult:
         """Build the objects from the pattern."""

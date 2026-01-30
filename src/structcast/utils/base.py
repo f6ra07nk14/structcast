@@ -132,14 +132,20 @@ def validate_import(module_name: str, target: str) -> None:
         raise SecurityError(f'Builtin "{target}" is blocked.')
 
 
-def validate_access(target: str, protected_member_check: bool = True, private_member_check: bool = True) -> None:
-    """Validate that accessing a target is safe.
+def validate_attribute(target: str, protected_member_check: bool = True, private_member_check: bool = True) -> None:
+    """Validate that an attribute access is safe.
 
     Args:
-        target (str): The target name to access.
-        protected_member_check (bool): If True, blocks accessing protected members (starting with _). Default is True.
-        private_member_check (bool): If True, blocks accessing private members (starting with __). Default is True.
+        target (str): The attribute name to access.
+        protected_member_check (bool): If True, blocks access to protected members (starting with '_'). Default is True.
+        private_member_check (bool): If True, blocks access to private members (starting with '__'). Default is True.
+
+    Raises:
+        ValueError: If the attribute name is not a valid identifier.
+        SecurityError: If the attribute access is blocked by security settings.
     """
+    if not target.isidentifier():
+        raise ValueError(f"Invalid attribute name: {target}")
     if private_member_check and target.startswith("__"):
         raise SecurityError(f'Target "{target}" is private member and cannot be accessed.')
     elif protected_member_check and target.startswith("_"):
@@ -172,8 +178,8 @@ def import_from_address(
             Default is None, which means the built-in module will be used.
         module_file (Optional[PathLike]): Optional path to a module file to load the module from.
         security_check (bool): If True, performs security checks. Use with extreme caution. Default is True.
-        protected_member_check (bool): If True, blocks importing protected members (starting with _). Default is True.
-        private_member_check (bool): If True, blocks importing private members (starting with __). Default is True.
+        protected_member_check (bool): If True, blocks access to protected members (starting with '_'). Default is True.
+        private_member_check (bool): If True, blocks access to private members (starting with '__'). Default is True.
 
     Returns:
         Any: The imported target.
@@ -199,7 +205,7 @@ def import_from_address(
         module, module_name = default_module, default_module.__name__
     if security_check:
         validate_import(module_name, target)
-        validate_access(target, protected_member_check, private_member_check)
+        validate_attribute(target, protected_member_check, private_member_check)
     if hasattr(module, target):
         return getattr(module, target)
     raise ImportError(f'Target "{target}" not found in module "{module_name}".')
