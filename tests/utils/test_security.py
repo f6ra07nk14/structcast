@@ -1,17 +1,14 @@
 """Tests for security features in import_from_address."""
 
-from collections.abc import Iterable
+from collections.abc import Generator, Iterable
+from contextlib import contextmanager
 import json
 import math
-from typing import List
+from typing import List, Optional
 
 import pytest
 
-from structcast.utils.base import (
-    SecurityError,
-    configure_security,
-    import_from_address,
-)
+from structcast.utils.base import SecurityError, configure_security, get_security_settings, import_from_address
 from structcast.utils.constants import DEFAULT_BLOCKED_BUILTINS, DEFAULT_BLOCKED_MODULES
 
 
@@ -74,50 +71,51 @@ class TestSecurityAllowedImports:
         assert import_from_address("typing.List") is List
 
 
+@contextmanager
+def configure_security_context(
+    blocked_modules: Optional[set[str]] = None,
+    blocked_builtins: Optional[set[str]] = None,
+    allowed_modules: Optional[set[str]] = None,
+) -> Generator[None, None, None]:
+    """Context manager to temporarily configure security settings."""
+    default_settings = get_security_settings()
+    try:
+        configure_security(
+            allowed_modules=allowed_modules,
+            blocked_modules=blocked_modules,
+            blocked_builtins=blocked_builtins,
+        )
+        yield
+    finally:
+        configure_security(**default_settings)
+
+
 class TestSecurityConfiguration:
     """Test security configuration options."""
 
     def test_custom_blocked_modules(self) -> None:
         """Test custom blocked modules."""
-        # Block json module
-        configure_security(blocked_modules={"json"})
-        try:
+        with configure_security_context(blocked_modules={"json"}):
             with pytest.raises(SecurityError, match="json.*blocked"):
                 import_from_address("json.loads")
-        finally:
-            # Restore defaults
-            configure_security(blocked_modules=DEFAULT_BLOCKED_MODULES.copy())
 
     def test_custom_blocked_builtins(self) -> None:
         """Test custom blocked builtins."""
-        # Block int builtin
-        configure_security(blocked_builtins={"int"})
-        try:
+        with configure_security_context(blocked_builtins={"int"}):
             with pytest.raises(SecurityError, match="int.*blocked"):
                 import_from_address("int")
-        finally:
-            # Restore defaults
-            configure_security(blocked_builtins=DEFAULT_BLOCKED_BUILTINS.copy())
 
     def test_allowlist_mode(self) -> None:
         """Test allowlist mode."""
-        # Only allow math module
-        configure_security(allowed_modules={"math", "builtins"})
-        try:
+        with configure_security_context(allowed_modules={"math", "builtins"}):
             assert import_from_address("math.sqrt") is math.sqrt
 
-            # json should be blocked
-            with pytest.raises(SecurityError, match="blocked"):
+            with pytest.raises(SecurityError, match="is not in the allowlist"):
                 import_from_address("json.loads")
-        finally:
-            # Restore to blocklist mode
-            configure_security(allowed_modules=None)
 
     def test_security_check_parameter(self) -> None:
         """Test security_check parameter."""
-        # Should allow dangerous import when explicitly skipped
-        result = import_from_address("eval", security_check=False)
-        assert result is eval
+        assert import_from_address("eval", security_check=False) is eval
 
 
 class TestSecurityEdgeCases:

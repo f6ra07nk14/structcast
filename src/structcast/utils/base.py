@@ -52,6 +52,19 @@ def configure_security(
         __allowed_modules.update(allowed_modules)
 
 
+def get_security_settings() -> dict[str, Any]:
+    """Get the current security settings.
+
+    Returns:
+        dict[str, Any]: A dictionary containing the current security settings.
+    """
+    return {
+        "blocked_modules": __blocked_modules.copy(),
+        "blocked_builtins": __blocked_builtins.copy(),
+        "allowed_modules": __allowed_modules.copy(),
+    }
+
+
 def register_dir(path: PathLike) -> None:
     """Register a directory to search for modules.
 
@@ -169,11 +182,11 @@ def import_from_address(
     elif module_name is not None:
         module = importlib.import_module(module_name)
     elif default_module is None:
-        module = importlib.import_module("builtins")
+        module, module_name = importlib.import_module("builtins"), "builtins"
     else:
-        module = default_module
+        module, module_name = default_module, default_module.__name__
     if security_check:
-        _validate_import(module.__name__, target)
+        _validate_import(module_name, target)
     if hasattr(module, target):
         return getattr(module, target)
-    raise ImportError(f'Target "{target}" not found in module "{module.__name__}".')
+    raise ImportError(f'Target "{target}" not found in module "{module_name}".')
