@@ -161,7 +161,7 @@ jobs:
           BRANCH_NAME="${{ steps.branch-name.outputs.sanitized }}"
           PY_VERSION="${{ matrix.python-version }}"
           BUILD_NEEDED="${{ steps.should-build.outputs.build-needed }}"
-          
+
           echo "=== Build Summary ==="
           echo "Branch: ${BRANCH_NAME}"
           echo "Python: ${PY_VERSION}"
@@ -174,7 +174,7 @@ jobs:
           BRANCH_NAME="${{ steps.branch-name.outputs.sanitized }}"
           PY_VERSION="${{ matrix.python-version }}"
           IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${BRANCH_NAME}-py${PY_VERSION}-latest"
-          
+
           echo "Verifying image: ${IMAGE_TAG}"
           if docker pull "${IMAGE_TAG}" 2>/dev/null; then
             echo "✓ Docker image exists and is accessible: ${IMAGE_TAG}"
@@ -193,7 +193,7 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-    
+
     container:
       # Note: env context is not available in container.image, so we use github.repository directly
       # Use sanitized branch name from build-docker job output to match built image tags
@@ -201,7 +201,7 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -210,15 +210,13 @@ jobs:
         run: |
           echo "=== Python Version ==="
           python --version
-          
-          echo ""
+
           echo "=== Code Quality Checks ==="
           ruff format --check src/ tests/
           ruff check src/ tests/
           mypy src/
           mypy tests/
-          
-          echo ""
+
           echo "=== Running Tests ==="
           pytest
 
