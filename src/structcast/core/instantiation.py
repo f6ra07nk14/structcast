@@ -1,0 +1,186 @@
+"""Core instantiation logic for StructCast."""
+
+import abc
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from functools import partial
+import logging
+from pathlib import Path
+from typing import Any, Optional, Union
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+
+from structcast.utils.base import import_from_address
+
+logger = logging.getLogger(__name__)
+
+
+class InstantiationError(Exception):
+    """Exception raised for errors during instantiation."""
+
+
+@dataclass(kw_only=True, slots=True, frozen=True)
+class PatternResult:
+    """Result of pattern matching."""
+
+    patterns: list["BasePattern"] = field(default_factory=list)
+    """The list of patterns applied."""
+
+    runs: list[Any] = field(default_factory=list)
+    """The list of instantiated objects."""
+
+
+class BasePattern(BaseModel, abc.ABC):
+    """Base class for pattern matching."""
+
+    model_config = ConfigDict(frozen=True, validate_default=True, extra="forbid", serialize_by_alias=True)
+
+    @abc.abstractmethod
+    def build(self, result: PatternResult) -> PatternResult:
+        """Build the objects from the pattern.
+
+        Args:
+            result (PatternResult): The current pattern result.
+
+        Returns:
+            PatternResult: The updated pattern result.
+        """
+
+
+class AddressPattern(BasePattern):
+    """Pattern for matching addresses."""
+
+    address: str = Field(alias="_addr_")
+    """The address to import."""
+
+    module_file: Optional[Path] = Field(None, alias="_file_")
+    """Optional path to the module file."""
+
+    def build(self, result: PatternResult) -> PatternResult:
+        """Build the objects from the pattern."""
+        runs = result.runs + [import_from_address(self.address, module_file=self.module_file)]
+        return type(result)(patterns=result.patterns + [self], runs=runs)
+
+
+class AttributePattern(BasePattern):
+    """Pattern for accessing attributes."""
+
+    attribute: str = Field(alias="_attr_")
+    """The attribute to access."""
+
+    def build(self, result: PatternResult) -> PatternResult:
+        """Build the objects from the pattern."""
+        if not result.runs:
+            raise InstantiationError("No object to access attribute from.")
+        runs, last = result.runs[:-1], result.runs[-1]
+        if hasattr(last, self.attribute):
+            return type(result)(patterns=result.patterns + [self], runs=runs + [getattr(last, self.attribute)])
+        msg = f'Attribute "{self.attribute}" not found in object ({last}) with previous patterns: {result.patterns}'
+        raise InstantiationError(msg)
+
+
+class CallPattern(BasePattern):
+    """Pattern for calling callables."""
+
+    call: Mapping[str, Any] = Field(alias="_call_")
+    """The call arguments."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_call(cls, data: Any) -> Any:
+        """Validate the call data."""
+        if isinstance(data, str):
+            if data == "_call_":
+                return {"_call_": {}}
+            raise ValueError(f"Invalid call pattern: {data}")
+        return data
+
+    def build(self, result: PatternResult) -> PatternResult:
+        """Build the objects from the pattern."""
+        if not result.runs:
+            raise InstantiationError("No object to call.")
+        runs, last = result.runs[:-1], result.runs[-1]
+        if callable(last):
+            return type(result)(patterns=result.patterns + [self], runs=runs + [last(**instantiate(self.call))])
+        raise InstantiationError(f"Last object is not callable: {last}")
+
+
+class PartialCallPattern(BasePattern):
+    """Pattern for partially calling callables."""
+
+    call: Mapping[str, Any] = Field(alias="_partial_")
+    """The call arguments."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_call(cls, data: Any) -> Any:
+        """Validate the call data."""
+        if isinstance(data, str):
+            if data == "_partial_":
+                return {"_partial_": {}}
+            raise ValueError(f"Invalid partial call pattern: {data}")
+        return data
+
+    def build(self, result: PatternResult) -> PatternResult:
+        """Build the objects from the pattern."""
+        if not result.runs:
+            raise InstantiationError("No object to partially call.")
+        runs, last = result.runs[:-1], result.runs[-1]
+        if callable(last):
+            run = partial(last, **instantiate(self.call))
+            return type(result)(patterns=result.patterns + [self], runs=runs + [run])
+        raise InstantiationError(f"Last object is not callable: {last}")
+
+
+class ObjectPattern(BasePattern):
+    """Pattern for creating objects."""
+
+    object: list[Union[AddressPattern, AttributePattern, CallPattern, PartialCallPattern]] = Field(alias="_obj_")
+    """The list of patterns to create the object."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_object(cls, data: Any) -> Any:
+        """Validate the object data."""
+        if isinstance(data, (list, tuple)) and data and data[0] == "_obj_":
+            return {"_obj_": data[1:]}
+        return data
+
+    def build(self, result: PatternResult) -> PatternResult:
+        """Build the runnable from the pattern."""
+        new = type(result)()
+        for ptn in self.object:
+            new = ptn.build(new)
+        if len(new.runs) != 1:
+            msg = f"ObjectPattern did not result in a single object (got {new.runs}): {new.patterns}"
+            raise InstantiationError(msg)
+        return type(result)(patterns=result.patterns + [self], runs=result.runs + new.runs)
+
+
+def instantiate(cfg: Any) -> Any:
+    """Instantiate an object from a configuration.
+
+    Args:
+        cfg (Any): The configuration to instantiate from.
+
+    Returns:
+        Any: The instantiated object.
+    """
+    if isinstance(cfg, (int, float, bool, bytes, Path, type(None))):
+        return cfg
+    try:
+        res = ObjectPattern.model_validate(cfg).build(PatternResult())
+        if len(res.runs) != 1:
+            msg = f"ObjectPattern did not result in a single object (got {res.runs}): {res.patterns}"
+            raise InstantiationError(msg)
+        return res.runs[0]
+    except ValidationError:
+        pass
+    if isinstance(cfg, (str, BaseModel)):
+        return cfg
+    if isinstance(cfg, (dict, Mapping)):
+        return {k: instantiate(v) for k, v in cfg.items()}
+    if isinstance(cfg, (list, tuple)):
+        return [instantiate(v) for v in cfg]
+    logger.warning(f"Unrecognized configuration type ({type(cfg)}). Returning as is.")
+    return cfg
