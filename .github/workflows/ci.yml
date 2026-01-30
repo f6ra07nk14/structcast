@@ -26,6 +26,8 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+    outputs:
+      sanitized-branch: ${{ steps.branch-name.outputs.sanitized }}
 
     steps:
       - name: Checkout code
@@ -193,7 +195,9 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
     
     container:
-      image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}-py${{ matrix.python-version }}-latest
+      # Note: env context is not available in container.image, so we use github.repository directly
+      # Use sanitized branch name from build-docker job output to match built image tags
+      image: ghcr.io/${{ github.repository }}:${{ needs.build-docker.outputs.sanitized-branch }}-py${{ matrix.python-version }}-latest
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
