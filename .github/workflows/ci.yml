@@ -188,7 +188,7 @@ jobs:
 
       - name: Verify Docker image
         run: |
-          IMAGE_TAG="${{ steps.determine-tag.outputs.tag }}"
+          IMAGE_TAG="${{ steps.determine-tag.outputs[format('tag-{0}', matrix.python-version)] }}"
           echo "Verifying image: ${IMAGE_TAG}"
 
           if docker pull "${IMAGE_TAG}" 2>/dev/null; then
