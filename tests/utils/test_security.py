@@ -15,7 +15,7 @@ from structcast.utils.constants import DEFAULT_BLOCKED_BUILTINS, DEFAULT_BLOCKED
 def configure_security_context(
     blocked_modules: Optional[set[str]] = None,
     blocked_builtins: Optional[set[str]] = None,
-    allowed_modules: Optional[set[str]] = None,
+    allowed_modules: Optional[set[Optional[str]]] = None,
 ) -> Generator[None, None, None]:
     """Context manager to temporarily configure security settings."""
     try:
