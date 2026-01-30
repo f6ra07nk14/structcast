@@ -1,74 +1,14 @@
 [project]
-name = "uv-default-project"
-version = "2.1.0"
-description = "A template uv project with Docker and CI integration"
+name = "structcast"
+version = "0.0.0"
+description = "Elegantly orchestrating structured data via a flexible and serializable workflow."
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = []
 
 [dependency-groups]
-dev = [
-    "pytest>=8.0.0",
-    "ruff>=0.8.0",
-    "mypy>=1.13.0",
-]
+dev = []
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling >= 1.26"]
 build-backend = "hatchling.build"
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-
-[tool.ruff]
-# Set the target Python version
-target-version = "py39"
-line-length = 88
-
-# Enable specific rule sets
-lint.select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
-    "F",   # pyflakes
-    "I",   # isort
-    "B",   # flake8-bugbear
-    "C4",  # flake8-comprehensions
-    "UP",  # pyupgrade
-]
-
-# Ignore specific rules if needed
-lint.ignore = []
-
-# Exclude directories
-exclude = [
-    ".git",
-    ".venv",
-    "test-env",
-    "__pycache__",
-    "build",
-    "dist",
-]
-
-[tool.ruff.lint.isort]
-known-first-party = ["uv_default_project"]
-
-[tool.mypy]
-python_version = "3.9"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = false
-disallow_incomplete_defs = false
-check_untyped_defs = true
-no_implicit_optional = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-warn_no_return = true
-strict_equality = true
-
-# Per-module options
-[[tool.mypy.overrides]]
-module = "tests.*"
-disallow_untyped_defs = false
