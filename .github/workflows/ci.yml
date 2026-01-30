@@ -61,7 +61,7 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             # For PRs, check changes between base and head
-            if git diff --name-only origin/${{ github.base_ref }}...${{ github.sha }} | grep -E '(Dockerfile|\.dockerignore|uv\.lock)'; then
+            if git diff --name-only origin/${{ github.base_ref }}...${{ github.sha }} | grep -E '(docker/|uv\.lock)'; then
               echo "changed=true" >> $GITHUB_OUTPUT
               echo "Docker files changed detected"
             else
@@ -71,7 +71,7 @@ jobs:
           else
             # For push events, check the latest commit
             if git rev-parse HEAD~1 >/dev/null 2>&1; then
-              if git diff --name-only HEAD~1 HEAD | grep -E '(Dockerfile|\.dockerignore|uv\.lock)'; then
+              if git diff --name-only HEAD~1 HEAD | grep -E '(docker/|uv\.lock)'; then
                 echo "changed=true" >> $GITHUB_OUTPUT
                 echo "Docker files changed detected"
               else
@@ -137,6 +137,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: docker/dev.dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
