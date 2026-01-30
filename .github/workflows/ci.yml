@@ -236,14 +236,12 @@ jobs:
           
           # Run type checking
           echo "Running type checking with mypy..."
-          mypy src/ tests/
+          mypy src/ 
+          mypy tests/
 
       - name: Run pytest
         id: run-tests
-        run: |
-          echo "Running tests"
-          export PYTHONPATH="$(pwd)/src"
-          pytest tests/ -v --tb=short
+        run: echo "Running tests" && pytest
 
       - name: Test summary
         if: always()
