@@ -4,10 +4,83 @@ version = "0.0.0"
 description = "Elegantly orchestrating structured data via a flexible and serializable workflow."
 readme = "README.md"
 requires-python = ">=3.9"
-dependencies = []
+dependencies = [
+    "pydantic>=2.11.0",
+]
 
 [dependency-groups]
-dev = []
+dev = ["mypy>=1.19.1", "pytest>=8.4.2", "pytest-cov>=7.0.0", "ruff>=0.14.14"]
+
+[tool.pytest.ini_options]
+log_cli = true
+log_level = "INFO"
+addopts = """\
+--doctest-modules \
+-s \
+--cov src/ \
+--cov-report term \
+--cov-report xml:coverage.xml \
+--cov-report html:coverage_html \
+"""
+testpaths = ["tests/", "src/structcast/"]
+
+[tool.mypy]
+python_version = "3.9"
+disallow_untyped_defs = true
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+# warn_required_dynamic_aliases = true
+
+[tool.ruff]
+src = ["src/structcast", "tests"]
+target-version = "py39"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "PL",     # pylint
+    "PT",     # pylint-pytest
+    "D",      # pydocstyle
+    "RUF022",
+]
+extend-select = [
+    "B",  # flake8-bugbear
+    "UP", # pyupgrade
+    "S",  # flake8-bandit
+    "C4", # flake8-comprehensions
+]
+ignore = ["PLW2901", "PLR2004"]
+exclude = []
+
+[tool.ruff.lint.per-file-ignores]
+"src/structcast/**" = ["PT", "B028"]
+"src/structcast/commands/**" = ["PT", "B028", "B008"]
+"tests/**" = ["S"]
+
+[tool.ruff.format]
+quote-style = "double"
+docstring-code-format = true
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+known-first-party = ["structcast"]
+force-sort-within-sections = true
+# lines-between-types = 1
+
+[tool.ruff.lint.pylint]
+max-args = 20
+max-returns = 10
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
 [build-system]
 requires = ["hatchling >= 1.26"]
