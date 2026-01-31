@@ -9,6 +9,7 @@ from typing import Any
 from pydantic import ValidationError
 import pytest
 
+from structcast.core.constants import MAX_INSTANTIATION_DEPTH
 from structcast.core.instantiation import (
     AddressPattern,
     AttributePattern,
@@ -20,7 +21,7 @@ from structcast.core.instantiation import (
     instantiate,
 )
 from structcast.utils.base import SecurityError
-from tests.utils import configure_security_context
+from tests.utils import configure_security_context, temporary_registered_dir
 
 # ============================================================================
 # Test 1: Basic Pattern Schema and Validation
@@ -58,7 +59,7 @@ class TestPatternSchemas:
 
     def test_attribute_pattern_invalid_identifier(self) -> None:
         """Test AttributePattern rejects invalid identifier."""
-        with pytest.raises(ValidationError):
+        with pytest.raises(SecurityError):
             AttributePattern.model_validate({"_attr_": "123invalid"})
 
     def test_attribute_pattern_private_member(self) -> None:
@@ -145,7 +146,7 @@ class TestPatternBuild:
         test_file = tmp_path / "mymodule.py"
         test_file.write_text("def my_func(): return 42")
         # Need to allow the custom module temporarily
-        with configure_security_context(allowed_modules={"mymodule"}):
+        with temporary_registered_dir(tmp_path), configure_security_context(allowed_modules={"mymodule"}):
             result = AddressPattern.model_validate({"_addr_": "my_func", "_file_": test_file}).build()
             assert len(result.runs) == 1
             assert callable(result.runs[0])
@@ -468,3 +469,82 @@ class TestSecurityBypassWithConfigureSecurity:
         # Private member protection
         with pytest.raises((ValidationError, SecurityError)):
             instantiate(["_obj_", {"_addr_": "list"}, {"_attr_": "__class__"}])
+
+
+class TestRecursionDepthProtection:
+    """Test protection against deep recursion attacks."""
+
+    def test_deep_nesting_blocked(self) -> None:
+        """Test that deeply nested configurations are blocked."""
+        # Create a deeply nested configuration
+        config: dict[str, Any] = {"_obj_": ["int"]}
+        for _ in range(MAX_INSTANTIATION_DEPTH):  # Exceed MAX_INSTANTIATION_DEPTH (100)
+            config = {"_obj_": [{"_addr_": "dict"}, {"_call_": {"value": config}}]}
+        with pytest.raises(InstantiationError, match="Maximum instantiation depth.*exceeded"):
+            instantiate(config)
+
+    def test_recursive_dict_structure(self) -> None:
+        """Test protection against recursive dictionary structures."""
+        # Create nested dicts with object patterns
+        config: dict[str, Any] = {"_obj_": [{"_addr_": "dict"}, {"_call_": {"value": "test"}}]}
+        for i in range(MAX_INSTANTIATION_DEPTH):
+            config = {"_obj_": [{"_addr_": "dict"}, {"_call_": {f"level_{i}": config}}]}
+        # This should trigger depth protection
+        with pytest.raises(InstantiationError, match="Maximum instantiation depth.*exceeded"):
+            instantiate(config)
+
+    def test_recursive_list_structure(self) -> None:
+        """Test protection against recursive list structures."""
+        config: list[Any] = [1, 2, 3]
+        for _ in range(MAX_INSTANTIATION_DEPTH):
+            config = [config]
+        with pytest.raises(InstantiationError, match="Maximum instantiation depth.*exceeded"):
+            instantiate(config)
+
+
+class TestAttributeValidationImprovements:
+    """Test improved attribute validation."""
+
+    @pytest.mark.parametrize(
+        "dunder",
+        [
+            "__subclasses__",
+            "__bases__",
+            "__globals__",
+            "__code__",
+            "__dict__",
+            "__class__",
+            "__mro__",
+            "__init__",
+            "__import__",
+        ],
+    )
+    def test_block_dangerous_dunders(self, dunder: str) -> None:
+        """Test that dangerous dunder methods are blocked."""
+        with pytest.raises(SecurityError, match="dangerous dunder"):
+            instantiate({"_obj_": [{"_addr_": "int"}, {"_attr_": dunder}]})
+
+    def test_block_non_ascii_attributes(self) -> None:
+        """Test that non-ASCII attribute names are blocked."""
+        # Try to use Unicode lookalikes
+        with pytest.raises(SecurityError, match="non-ascii"):
+            instantiate({"_obj_": [{"_addr_": "int"}, {"_attr_": "ｒｅａｌ"}]})  # Full-width characters
+
+        with pytest.raises(SecurityError, match="non-ascii"):
+            instantiate({"_obj_": [{"_addr_": "int"}, {"_attr_": "реаl"}]})  # Cyrillic characters
+
+    def test_block_whitespace_in_attributes(self) -> None:
+        """Test that attributes with whitespace are blocked."""
+        with pytest.raises(SecurityError, match="Invalid attribute name"):
+            instantiate({"_obj_": [{"_addr_": "int"}, {"_attr_": " real"}]})
+
+        with pytest.raises(SecurityError, match="Invalid attribute name"):
+            instantiate({"_obj_": [{"_addr_": "int"}, {"_attr_": "real "}]})
+
+        with pytest.raises(SecurityError, match="Invalid attribute name"):
+            instantiate({"_obj_": [{"_addr_": "int"}, {"_attr_": "re al"}]})
+
+    def test_normal_attributes_allowed(self) -> None:
+        """Test that normal attributes still work."""
+        result = instantiate({"_obj_": [{"_addr_": "int"}, {"_attr_": "real"}]})
+        assert result == int.real
