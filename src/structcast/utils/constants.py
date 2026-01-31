@@ -139,3 +139,16 @@ DEFAULT_ALLOWED_BUILTINS = {
     "KeyError",
     "IndexError",
 }
+
+# Security: Dangerous dunder methods that should be blocked by default
+DEFAULT_DANGEROUS_DUNDERS = {
+    "__subclasses__",
+    "__bases__",
+    "__globals__",
+    "__code__",
+    "__dict__",
+    "__class__",
+    "__mro__",
+    "__init__",
+    "__import__",
+}
