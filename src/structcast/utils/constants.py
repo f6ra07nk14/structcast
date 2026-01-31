@@ -1,6 +1,30 @@
 """Constants for StructCast utilities."""
 
-DEFAULT_ALLOWED_MODULES: set[str] = {"builtins", "math", "structcast"}
+DEFAULT_ALLOWED_MODULES: set[str] = {
+    # --- Core Data Structures ---
+    "collections",
+    "datetime",
+    "uuid",
+    "decimal",
+    "enum",
+    # --- Logic & Math ---
+    "math",
+    "itertools",
+    "functools",
+    "random",
+    "secrets",
+    # --- Text & Encoding ---
+    "string",
+    "base64",
+    "json",
+    "yaml",  # Assuming PyYAML is installed
+    "html",
+    # --- Parsing (Network safe) ---
+    "urllib.parse",
+    "ipaddress",
+    # --- Project Self-Ref ---
+    "structcast",
+}
 
 # Security: Dangerous modules that should be blocked by default
 DEFAULT_BLOCKED_MODULES = {
@@ -35,7 +59,7 @@ DEFAULT_BLOCKED_MODULES = {
     "ssl",  # TLS/SSL wrapper for socket objects
     "asyncio",  # Asynchronous I/O (often involves networking)
     "requests",  # HTTP library (if installed, commonly targeted for SSRF)
-    "urllib",  # URL handling modules
+    "urllib.request",  # URL handling modules
     "http",  # HTTP protocol clients
     "ftplib",  # FTP protocol client
     "poplib",  # POP3 protocol client
@@ -62,36 +86,56 @@ DEFAULT_BLOCKED_MODULES = {
     "concurrent",  # Launching parallel tasks
 }
 
-# Security: Dangerous builtins that should be blocked by default
-DEFAULT_BLOCKED_BUILTINS = {
-    # --- Execution & Compilation ---
-    "eval",  # Evaluate Python expressions
-    "exec",  # Execute dynamic Python code
-    "compile",  # Compile source into code objects
-    "__import__",  # Core import function (primary target for bypasses)
-    # --- File & I/O ---
-    "open",  # Open files (read/write access)
-    "input",  # Read string from standard input (blocks execution)
-    "print",  # Writing to stdout (can be used for spamming/DoS in some contexts)
-    # --- System & Lifecycle ---
-    "exit",  # Exit the interpreter
-    "quit",  # Alias for exit
-    "help",  # Invokes the built-in help system (can be interactive)
-    "breakpoint",  # Drops into the debugger
-    # --- Introspection & Attribute Access ---
-    # Blocking these prevents attackers from traversing the object graph
-    # to find hidden modules (gadget chains).
-    "globals",  # Access to the global symbol table
-    "locals",  # Access to the local symbol table
-    "vars",  # Return __dict__ attribute
-    "dir",  # Return list of attributes
-    "getattr",  # Get attribute value (critical for gadget chains)
-    "setattr",  # Set attribute value (can corrupt internal state)
-    "delattr",  # Delete attribute
-    "hasattr",  # Check for attribute existence
-    # --- Low-level Types ---
-    "memoryview",  # Direct access to internal data of an object
-    "staticmethod",  # Often used in gadget chains
-    "classmethod",  # Often used in gadget chains
-    "type",  # Can be used to create new classes dynamically
+# Security: Only strictly safe builtins are allowed
+DEFAULT_ALLOWED_BUILTINS = {
+    # --- Data Types (Constructors) ---
+    "bool",
+    "int",
+    "float",
+    "complex",
+    "str",
+    "bytes",
+    "bytearray",
+    "list",
+    "tuple",
+    "set",
+    "frozenset",
+    "dict",
+    # --- Inspection / Helpers (Safe) ---
+    "len",  # Get length
+    "abs",  # Absolute value
+    "min",
+    "max",  # Min/Max value
+    "sum",  # Summation
+    "all",
+    "any",  # Boolean logic
+    "divmod",  # Division
+    "round",  # Rounding
+    "hash",  # Hashing (safe for immutable types)
+    "id",  # Object ID (mostly harmless, though sometimes leaks info)
+    "enumerate",  # Loop helper
+    "zip",  # Loop helper
+    "range",  # Loop helper
+    "reversed",  # Loop helper
+    "sorted",  # Sorting
+    "filter",  # Functional helper
+    "map",  # Functional helper
+    "pow",  # Power function
+    "slice",  # Slice object
+    # --- Formatting ---
+    "format",  # String formatting
+    "chr",  # Int to Char
+    "ord",  # Char to Int
+    "bin",
+    "oct",
+    "hex",  # Number formatting
+    "ascii",  # ASCII representation
+    "repr",  # String representation (Usually safe, but watch out for massive outputs)
+    # --- Errors ---
+    # Allowing Exception types is usually fine for raising errors
+    "Exception",
+    "ValueError",
+    "TypeError",
+    "KeyError",
+    "IndexError",
 }

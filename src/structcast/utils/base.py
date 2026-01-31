@@ -5,10 +5,11 @@ import importlib.util
 import logging
 from os import PathLike
 from pathlib import Path
+import re
 from types import ModuleType
 from typing import Any, Optional, cast
 
-from structcast.utils.constants import DEFAULT_ALLOWED_MODULES, DEFAULT_BLOCKED_BUILTINS, DEFAULT_BLOCKED_MODULES
+from structcast.utils.constants import DEFAULT_ALLOWED_BUILTINS, DEFAULT_ALLOWED_MODULES, DEFAULT_BLOCKED_MODULES
 
 __logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ __directories: list[Path] = []
 
 # Global security settings
 __blocked_modules: set[str] = DEFAULT_BLOCKED_MODULES.copy()
-__blocked_builtins: set[str] = DEFAULT_BLOCKED_BUILTINS.copy()
+__allowed_builtins: set[str] = DEFAULT_ALLOWED_BUILTINS.copy()
 __allowed_modules: set[Optional[str]] = cast(set[Optional[str]], DEFAULT_ALLOWED_MODULES.copy())
 
 
@@ -27,36 +28,23 @@ class SecurityError(Exception):
 
 def configure_security(
     blocked_modules: Optional[set[str]] = None,
-    blocked_builtins: Optional[set[str]] = None,
+    allowed_builtins: Optional[set[str]] = None,
     allowed_modules: Optional[set[Optional[str]]] = None,
 ) -> None:
     """Configure security settings for import_from_address.
 
     Args:
         blocked_modules (Optional[set[str]]): Set of module names to block. If None, uses default blocked modules.
-        blocked_builtins (Optional[set[str]]): Set of builtin names to block. If None, uses default blocked builtins.
+        allowed_builtins (Optional[set[str]]): Set of builtin names to allow. If None, uses default allowed builtins.
         allowed_modules (Optional[set[Optional[str]]]): If provided, only these modules are allowed (allowlist mode).
             If None, uses default allowed modules. If set contains None, all modules are allowed.
     """
     __blocked_modules.clear()
-    __blocked_modules.update(blocked_modules or DEFAULT_BLOCKED_MODULES)
-    __blocked_builtins.clear()
-    __blocked_builtins.update(blocked_builtins or DEFAULT_BLOCKED_BUILTINS)
+    __blocked_modules.update(DEFAULT_BLOCKED_MODULES if blocked_modules is None else blocked_modules)
+    __allowed_builtins.clear()
+    __allowed_builtins.update(DEFAULT_ALLOWED_BUILTINS if allowed_builtins is None else allowed_builtins)
     __allowed_modules.clear()
-    __allowed_modules.update(allowed_modules or DEFAULT_ALLOWED_MODULES)
-
-
-def get_security_settings() -> dict[str, Any]:
-    """Get the current security settings.
-
-    Returns:
-        dict[str, Any]: A dictionary containing the current security settings.
-    """
-    return {
-        "blocked_modules": __blocked_modules.copy(),
-        "blocked_builtins": __blocked_builtins.copy(),
-        "allowed_modules": __allowed_modules.copy(),
-    }
+    __allowed_modules.update(DEFAULT_ALLOWED_MODULES if allowed_modules is None else allowed_modules)
 
 
 def register_dir(path: PathLike) -> None:
@@ -123,13 +111,13 @@ def validate_import(module_name: str, target: str) -> None:
     Raises:
         SecurityError: If the import is blocked by security settings.
     """
-    names = module_name.split(".")
-    if None not in __allowed_modules and names[0] not in __allowed_modules:
+    if module_name == "builtins":
+        if target not in __allowed_builtins:
+            raise SecurityError(f'Builtin "{target}" is blocked.')
+    elif None not in __allowed_modules and not any(re.match(rf"^{n}\.?", module_name) for n in __allowed_modules if n):
         raise SecurityError(f'Module "{module_name}.{target}" is not in the allowlist.')
-    if any(n in __blocked_modules for n in names):
+    if any(re.match(rf"\.?{n}\.?", module_name) for n in __blocked_modules if n):
         raise SecurityError(f'Module "{module_name}.{target}" is blocked.')
-    if module_name == "builtins" and target in __blocked_builtins:
-        raise SecurityError(f'Builtin "{target}" is blocked.')
 
 
 def validate_attribute(target: str, protected_member_check: bool = True, private_member_check: bool = True) -> None:
