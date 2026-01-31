@@ -21,6 +21,7 @@ from pydantic import (
 )
 from typing_extensions import TypeAlias
 
+from structcast.core.constants import MAX_INSTANTIATION_DEPTH
 from structcast.utils.base import import_from_address, validate_attribute
 
 __logger = logging.getLogger(__name__)
@@ -38,6 +39,9 @@ class PatternResult:
 
     runs: list[Any] = field(default_factory=list)
     """The list of instantiated objects."""
+
+    depth: int = 0
+    """Current recursion depth for security checks."""
 
 
 class InstantiationError(Exception):
@@ -61,8 +65,20 @@ class BasePattern(BaseModel, abc.ABC):
         """
 
 
-def _validate_pattern_result(res: Optional[PatternResult]) -> tuple[type[PatternResult], list[BasePattern], list[Any]]:
-    return (PatternResult, [], []) if res is None else (type(res), res.patterns, res.runs)
+def _validate_pattern_result(
+    res: Optional[PatternResult],
+) -> tuple[type[PatternResult], list[BasePattern], list[Any], int]:
+    """Validate pattern result and extract components.
+
+    Returns:
+        Tuple of (result_type, patterns, runs, depth)
+    """
+    if res is None:
+        return PatternResult, [], [], 0
+    # Security check: enforce depth limit
+    if res.depth >= MAX_INSTANTIATION_DEPTH:
+        raise InstantiationError(f"Maximum instantiation depth exceeded: {MAX_INSTANTIATION_DEPTH}")
+    return type(res), res.patterns, res.runs, res.depth
 
 
 class AddressPattern(BasePattern):
@@ -76,8 +92,9 @@ class AddressPattern(BasePattern):
 
     def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the objects from the pattern."""
-        res_t, ptns, runs = _validate_pattern_result(result)
-        return res_t(patterns=ptns + [self], runs=runs + [import_from_address(self.address, module_file=self.file)])
+        res_t, ptns, runs, depth = _validate_pattern_result(result)
+        run = import_from_address(self.address, module_file=self.file)
+        return res_t(patterns=ptns + [self], runs=runs + [run], depth=depth)
 
 
 class AttributePattern(BasePattern):
@@ -95,13 +112,13 @@ class AttributePattern(BasePattern):
 
     def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the objects from the pattern."""
-        res_t, ptns, runs = _validate_pattern_result(result)
+        res_t, ptns, runs, depth = _validate_pattern_result(result)
         if not runs:
             raise InstantiationError("No object to access attribute from.")
         runs, last = runs[:-1], runs[-1]
         if hasattr(last, self.attribute):
-            return res_t(patterns=ptns + [self], runs=runs + [getattr(last, self.attribute)])
-        msg = f'Attribute "{self.attribute}" not found in object ({last}) with previous patterns: {ptns}'
+            return res_t(patterns=ptns + [self], runs=runs + [getattr(last, self.attribute)], depth=depth)
+        msg = f'Attribute "{self.attribute}" not found in object ({last}) built from previous patterns: {ptns}'
         raise InstantiationError(msg)
 
 
@@ -123,13 +140,14 @@ class CallPattern(BasePattern):
 
     def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the objects from the pattern."""
-        res_t, ptns, runs = _validate_pattern_result(result)
+        res_t, ptns, runs, depth = _validate_pattern_result(result)
         if not runs:
             raise InstantiationError("No object to call.")
         runs, last = runs[:-1], runs[-1]
         if callable(last):
-            return res_t(patterns=ptns + [self], runs=runs + [last(**instantiate(self.call))])
-        raise InstantiationError(f"Object ({last}) is not callable with previous patterns: {ptns}")
+            run = last(**instantiate(self.call, __depth__=depth + 1))
+            return res_t(patterns=ptns + [self], runs=runs + [run], depth=depth)
+        raise InstantiationError(f"Object ({last}) built from previous patterns is not callable: {ptns}")
 
 
 class BindPattern(BasePattern):
@@ -140,13 +158,14 @@ class BindPattern(BasePattern):
 
     def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the objects from the pattern."""
-        res_t, ptns, runs = _validate_pattern_result(result)
+        res_t, ptns, runs, depth = _validate_pattern_result(result)
         if not runs:
             raise InstantiationError("No object to bind.")
         runs, last = runs[:-1], runs[-1]
         if callable(last):
-            return res_t(patterns=ptns + [self], runs=runs + [partial(last, **instantiate(self.bind))])
-        raise InstantiationError(f"Object ({last}) is not callable with previous patterns: {ptns}")
+            run = partial(last, **instantiate(self.bind, __depth__=depth + 1))
+            return res_t(patterns=ptns + [self], runs=runs + [run], depth=depth)
+        raise InstantiationError(f"Object ({last}) built from previous patterns is not callable: {ptns}")
 
 
 class ObjectPattern(BasePattern):
@@ -165,8 +184,8 @@ class ObjectPattern(BasePattern):
 
     def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the runnable from the pattern."""
-        res_t, ptns, runs = _validate_pattern_result(result)
-        new = res_t()
+        res_t, ptns, runs, depth = _validate_pattern_result(result)
+        new = res_t(depth=depth + 1)
         try:
             for ptn in TypeAdapter(list[PatternLike]).validate_python(self.object):
                 new = ptn.build(new)
@@ -175,27 +194,34 @@ class ObjectPattern(BasePattern):
         if len(new.runs) != 1:
             msg = f"ObjectPattern did not result in a single object (got {new.runs}): {new.patterns}"
             raise InstantiationError(msg)
-        return res_t(patterns=ptns + [self], runs=runs + new.runs)
+        return res_t(patterns=ptns + [self], runs=runs + new.runs, depth=depth)
 
 
 PatternLike: TypeAlias = Union[AddressPattern, AttributePattern, CallPattern, BindPattern, ObjectPattern]
 
 
-def instantiate(cfg: Any) -> Any:
+def instantiate(cfg: Any, *, __depth__: int = 0) -> Any:
     """Instantiate an object from a configuration.
 
     Args:
         cfg (Any): The configuration to instantiate from.
+        __depth__ (int): Internal recursion depth counter. DO NOT set manually.
 
     Returns:
         Any: The instantiated object.
+
+    Raises:
+        InstantiationError: If maximum recursion depth is exceeded or instantiation fails.
     """
+    # Security: Check recursion depth
+    if __depth__ >= MAX_INSTANTIATION_DEPTH:
+        raise InstantiationError(f"Maximum instantiation depth exceeded: {MAX_INSTANTIATION_DEPTH}")
     if isinstance(cfg, (int, float, bool, bytes, Path, type(None))):
         return cfg
     try:
-        res = ObjectPattern.model_validate(cfg).build(PatternResult())
+        res = ObjectPattern.model_validate(cfg).build(PatternResult(depth=__depth__))
         if len(res.runs) != 1:
-            msg = f"ObjectPattern did not result in a single object (got {res.runs}): {res.patterns}"
+            msg = f"Instantiation did not result in a single object (got {res.runs}): {res.patterns}"
             raise InstantiationError(msg)
         return res.runs[0]
     except ValidationError:
@@ -203,8 +229,8 @@ def instantiate(cfg: Any) -> Any:
     if isinstance(cfg, (str, BaseModel)):
         return cfg
     if isinstance(cfg, (dict, Mapping)):
-        return type(cfg)(**{k: instantiate(v) for k, v in cfg.items()})
+        return type(cfg)(**{k: instantiate(v, __depth__=__depth__ + 1) for k, v in cfg.items()})
     if isinstance(cfg, (list, tuple)):
-        return type(cfg)(instantiate(v) for v in cfg)
-    __logger.warning(f"Unrecognized configuration type ({type(cfg)}). Returning as is.")
+        return type(cfg)(instantiate(v, __depth__=__depth__ + 1) for v in cfg)
+    __logger.warning(f"Unrecognized configuration type ({type(cfg).__name__}). Returning as is.")
     return cfg
