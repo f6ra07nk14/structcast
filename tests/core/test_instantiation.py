@@ -4,7 +4,9 @@ from collections import Counter
 from collections.abc import Generator
 import math
 from pathlib import Path
-from typing import Any
+import time
+from typing import Any, Callable
+from unittest.mock import patch
 
 from pydantic import ValidationError
 import pytest
@@ -361,47 +363,47 @@ class TestSecurityAndInjectionAttacks:
 
     def test_blocked_os_module(self) -> None:
         """Test that os module is blocked by allowlist."""
-        with pytest.raises(SecurityError, match="not in the allowlist"):
+        with pytest.raises(SecurityError, match="os.system"):
             instantiate(["_obj_", {"_addr_": "os.system"}])
 
     def test_blocked_subprocess_module(self) -> None:
         """Test that subprocess module is blocked."""
-        with pytest.raises(SecurityError, match="not in the allowlist"):
+        with pytest.raises(SecurityError, match="subprocess.run"):
             instantiate(["_obj_", {"_addr_": "subprocess.run"}])
 
     def test_blocked_eval_builtin(self) -> None:
         """Test that eval builtin is blocked."""
-        with pytest.raises(SecurityError, match="blocked"):
+        with pytest.raises(SecurityError, match="eval"):
             instantiate(["_obj_", {"_addr_": "eval"}])
 
     def test_blocked_exec_builtin(self) -> None:
         """Test that exec builtin is blocked."""
-        with pytest.raises(SecurityError, match="blocked"):
+        with pytest.raises(SecurityError, match="exec"):
             instantiate(["_obj_", {"_addr_": "exec"}])
 
     def test_blocked_compile_builtin(self) -> None:
         """Test that compile builtin is blocked."""
-        with pytest.raises(SecurityError, match="blocked"):
+        with pytest.raises(SecurityError, match="compile"):
             instantiate(["_obj_", {"_addr_": "compile"}])
 
     def test_blocked_open_builtin(self) -> None:
         """Test that open builtin is blocked."""
-        with pytest.raises(SecurityError, match="blocked"):
+        with pytest.raises(SecurityError, match="open"):
             instantiate(["_obj_", {"_addr_": "open"}])
 
     def test_blocked_getattr(self) -> None:
         """Test that getattr builtin is blocked."""
-        with pytest.raises(SecurityError, match="blocked"):
+        with pytest.raises(SecurityError, match="getattr"):
             instantiate(["_obj_", {"_addr_": "getattr"}])
 
     def test_blocked_setattr(self) -> None:
         """Test that setattr builtin is blocked."""
-        with pytest.raises(SecurityError, match="blocked"):
+        with pytest.raises(SecurityError, match="setattr"):
             instantiate(["_obj_", {"_addr_": "setattr"}])
 
     def test_blocked_globals(self) -> None:
         """Test that globals builtin is blocked."""
-        with pytest.raises(SecurityError, match="blocked"):
+        with pytest.raises(SecurityError, match="globals"):
             instantiate(["_obj_", {"_addr_": "globals"}])
 
     def test_private_member_access(self) -> None:
@@ -425,12 +427,12 @@ class TestSecurityAndInjectionAttacks:
 
     def test_injection_attempt_via_import(self) -> None:
         """Test that __import__ is blocked."""
-        with pytest.raises(SecurityError, match="blocked"):
+        with pytest.raises(SecurityError, match="__import__"):
             instantiate(["_obj_", {"_addr_": "__import__"}])
 
     def test_injection_attempt_type_blocked(self) -> None:
         """Test that type builtin is blocked."""
-        with pytest.raises(SecurityError, match="blocked"):
+        with pytest.raises(SecurityError, match="type"):
             instantiate(["_obj_", {"_addr_": "type"}])
 
 
@@ -452,16 +454,17 @@ class TestSecurityBypassWithConfigureSecurity:
     def test_allowed_modules_does_not_bypass_blocked_builtins(self, builtin: str) -> None:
         """Verify that allowed_modules cannot bypass blocked_builtins."""
         # Dangerous builtins still blocked
-        with pytest.raises(SecurityError, match="blocked"):
+        with pytest.raises(SecurityError, match=builtin):
             instantiate(["_obj_", {"_addr_": builtin}])
 
     @pytest.mark.parametrize(
-        "addr", ["os.system", "subprocess.run", "sys.exit", "importlib.import_module", "pickle.loads", "marshal.loads"]
+        "addr",
+        ["os.system", "subprocess.run", "sys.exit", "importlib.import_module", "pickle.loads", "marshal.loads"],
     )
     def test_allowed_modules_does_not_bypass_blocked_modules(self, addr: str) -> None:
         """Verify that allowed_modules cannot bypass blocked_modules."""
         # Dangerous modules should still be blocked
-        with pytest.raises(SecurityError, match="blocked"):
+        with pytest.raises(SecurityError, match=addr):
             instantiate(["_obj_", {"_addr_": addr}])
 
     def test_conclusion_security_is_layered(self) -> None:
@@ -521,30 +524,90 @@ class TestAttributeValidationImprovements:
     )
     def test_block_dangerous_dunders(self, dunder: str) -> None:
         """Test that dangerous dunder methods are blocked."""
-        with pytest.raises(SecurityError, match="dangerous dunder"):
+        with pytest.raises(SecurityError, match=dunder):
             instantiate({"_obj_": [{"_addr_": "int"}, {"_attr_": dunder}]})
 
     def test_block_non_ascii_attributes(self) -> None:
         """Test that non-ASCII attribute names are blocked."""
         # Try to use Unicode lookalikes
-        with pytest.raises(SecurityError, match="non-ascii"):
+        with pytest.raises(SecurityError, match="Non-ASCII"):
             instantiate({"_obj_": [{"_addr_": "int"}, {"_attr_": "ｒｅａｌ"}]})  # Full-width characters
 
-        with pytest.raises(SecurityError, match="non-ascii"):
+        with pytest.raises(SecurityError, match="Non-ASCII"):
             instantiate({"_obj_": [{"_addr_": "int"}, {"_attr_": "реаl"}]})  # Cyrillic characters
 
     def test_block_whitespace_in_attributes(self) -> None:
         """Test that attributes with whitespace are blocked."""
-        with pytest.raises(SecurityError, match="Invalid attribute name"):
+        with pytest.raises(SecurityError, match="Invalid attribute"):
             instantiate({"_obj_": [{"_addr_": "int"}, {"_attr_": " real"}]})
 
-        with pytest.raises(SecurityError, match="Invalid attribute name"):
+        with pytest.raises(SecurityError, match="Invalid attribute"):
             instantiate({"_obj_": [{"_addr_": "int"}, {"_attr_": "real "}]})
 
-        with pytest.raises(SecurityError, match="Invalid attribute name"):
+        with pytest.raises(SecurityError, match="Invalid attribute"):
             instantiate({"_obj_": [{"_addr_": "int"}, {"_attr_": "re al"}]})
 
     def test_normal_attributes_allowed(self) -> None:
         """Test that normal attributes still work."""
         result = instantiate({"_obj_": [{"_addr_": "int"}, {"_attr_": "real"}]})
         assert result == int.real
+
+
+class MockTime:
+    """Mock time.time to simulate elapsed time."""
+
+    def __init__(self, times: int, original_time: Callable[[], float]) -> None:
+        """Initialize the mock time."""
+        self.calls = 0
+        self.times = times
+        self.original_time = original_time
+
+    def __call__(self) -> float:
+        """Return simulated time."""
+        self.calls += 1
+        if self.calls < self.times:
+            return self.original_time()
+        else:
+            return self.original_time() + 31  # Exceed MAX_INSTANTIATION_TIME (30s)
+
+
+class TestTimeoutProtection:
+    """Test timeout protection for instantiation."""
+
+    def test_instantiate_respects_timeout(self) -> None:
+        """Test that instantiate enforces timeout limit."""
+        # Create a configuration that will take longer than allowed by mocking time to simulate elapsed time
+        with patch("time.time", side_effect=MockTime(2, time.time)):
+            with pytest.raises(InstantiationError, match="Maximum instantiation time exceeded"):
+                instantiate({"a": 1, "b": 2, "c": 3})
+
+    def test_instantiate_timeout_propagates_through_nested_calls(self) -> None:
+        """Test that timeout is checked in nested instantiation."""
+        with patch("time.time", side_effect=MockTime(3, time.time)):
+            with pytest.raises(InstantiationError, match="Maximum instantiation time exceeded"):
+                instantiate({"outer": {"inner": {"deep": {"value": 42}}}})
+
+
+class TestErrorMessageSanitization:
+    """Test that error messages don't leak sensitive information."""
+
+    def test_attribute_error_doesnt_expose_object_repr(self) -> None:
+        """Test that attribute errors don't expose object representation."""
+        cfg = {"_obj_": [{"_addr_": "int"}, {"_attr_": "nonexistent"}]}
+        with pytest.raises(InstantiationError) as exc_info:
+            instantiate(cfg)
+        # Should mention type but not repr of object
+        assert "type" in str(exc_info.value)
+        assert "nonexistent" in str(exc_info.value)
+        # Should not contain actual repr like "<class 'int'>"
+        assert "<class" not in str(exc_info.value)
+
+    def test_call_error_doesnt_expose_object_repr(self) -> None:
+        """Test that call errors don't expose object representation."""
+        # int() is callable so this won't fail - use str instead which returns an instance
+        cfg = {"_obj_": [{"_addr_": "str"}, {"_call_": {}}, {"_call_": {}}]}
+        with pytest.raises(InstantiationError) as exc_info:
+            instantiate(cfg)
+        # Should mention it's not callable without exposing internals
+        assert "not callable" in str(exc_info.value)
+        assert "str" in str(exc_info.value)
