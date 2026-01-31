@@ -175,12 +175,12 @@ def validate_import(module_name: str, target: str) -> None:
     """
     if module_name == "builtins":
         if target not in __allowed_builtins:
-            raise SecurityError(f'Builtin "{target}" is blocked.')
+            raise SecurityError(f"Blocked builtin import attempt: {target}")
     elif None not in __allowed_modules:
         if not any(n and (module_name == n or module_name.startswith(f"{n}.")) for n in __allowed_modules):
-            raise SecurityError(f'Module "{module_name}.{target}" is not in the allowlist.')
+            raise SecurityError(f"Blocked import attempt (not in allowlist): {module_name}.{target}")
     if any(n and (module_name == n or module_name.startswith(f"{n}.")) for n in __blocked_modules):
-        raise SecurityError(f'Module "{module_name}.{target}" is blocked.')
+        raise SecurityError(f"Blocked import attempt (blocklisted): {module_name}.{target}")
 
 
 def validate_attribute(
@@ -202,15 +202,15 @@ def validate_attribute(
         SecurityError: If the attribute access is blocked by security settings.
     """
     if not target.isidentifier() or target != target.strip():
-        raise SecurityError(f"Invalid attribute name: {repr(target)}")
+        raise SecurityError(f"Invalid attribute access attempt: {repr(target)}")
     if ascii_check and not target.isascii():
-        raise SecurityError(f"Attribute name contains non-ascii characters: {repr(target)}")
+        raise SecurityError(f"Non-ASCII attribute access attempt: {repr(target)}")
     if target in __dangerous_dunders:
-        raise SecurityError(f"Attribute name is blocked due to dangerous dunder: {repr(target)}")
+        raise SecurityError(f"Dangerous dunder access attempt: {repr(target)}")
     if private_member_check and target.startswith("__"):
-        raise SecurityError(f'Target "{target}" is private member and cannot be accessed.')
+        raise SecurityError(f"Private member access attempt: {repr(target)}")
     elif protected_member_check and target.startswith("_"):
-        raise SecurityError(f'Target "{target}" is protected member and cannot be accessed.')
+        raise SecurityError(f"Protected member access attempt: {repr(target)}")
 
 
 def import_from_address(
