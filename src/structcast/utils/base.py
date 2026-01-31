@@ -8,6 +8,8 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, Optional, cast
 
+from ruamel.yaml import YAML
+
 from structcast.utils.constants import (
     DEFAULT_ALLOWED_BUILTINS,
     DEFAULT_ALLOWED_MODULES,
@@ -284,3 +286,16 @@ def import_from_address(
     if hasattr(module, target):
         return getattr(module, target)
     raise ImportError(f'Target "{target}" not found in module "{module_name}".')
+
+
+def load_yaml(yaml_file: PathLike) -> dict[str, Any]:
+    """Load a yaml file.
+
+    Args:
+        yaml_file (PathLike): Path to the yaml file.
+
+    Returns:
+        Loaded yaml file.
+    """
+    with open(check_path(yaml_file), encoding="utf-8") as fin:
+        return YAML(typ="safe", pure=True).load(fin)  # YAML 1.2 support

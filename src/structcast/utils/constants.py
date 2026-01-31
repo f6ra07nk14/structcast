@@ -17,7 +17,6 @@ DEFAULT_ALLOWED_MODULES: set[str] = {
     "string",
     "base64",
     "json",
-    "yaml",  # Assuming PyYAML is installed
     "html",
     # --- Parsing (Network safe) ---
     "urllib.parse",
