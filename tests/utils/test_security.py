@@ -1,32 +1,12 @@
 """Tests for security features in import_from_address."""
 
-from collections.abc import Generator
-from contextlib import contextmanager
 import math
-from typing import Optional
 
 import pytest
 
-from structcast.utils.base import SecurityError, configure_security, import_from_address
-from structcast.utils.constants import DEFAULT_BLOCKED_BUILTINS, DEFAULT_BLOCKED_MODULES
-
-
-@contextmanager
-def configure_security_context(
-    blocked_modules: Optional[set[str]] = None,
-    blocked_builtins: Optional[set[str]] = None,
-    allowed_modules: Optional[set[Optional[str]]] = None,
-) -> Generator[None, None, None]:
-    """Context manager to temporarily configure security settings."""
-    try:
-        configure_security(
-            allowed_modules=allowed_modules,
-            blocked_modules=blocked_modules,
-            blocked_builtins=blocked_builtins,
-        )
-        yield
-    finally:
-        configure_security()
+from structcast.utils.base import SecurityError, import_from_address
+from structcast.utils.constants import DEFAULT_BLOCKED_MODULES
+from tests.utils import configure_security_context
 
 
 class TestSecurityBlocking:
@@ -92,7 +72,7 @@ class TestSecurityConfiguration:
 
     def test_custom_blocked_builtins(self) -> None:
         """Test custom blocked builtins."""
-        with configure_security_context(blocked_builtins={"int"}):
+        with configure_security_context(allowed_builtins={}):
             with pytest.raises(SecurityError, match="int.*blocked"):
                 import_from_address("int")
 
@@ -142,9 +122,3 @@ class TestDefaultSecuritySettings:
         assert len(DEFAULT_BLOCKED_MODULES) > 0
         assert "os" in DEFAULT_BLOCKED_MODULES
         assert "subprocess" in DEFAULT_BLOCKED_MODULES
-
-    def test_default_blocked_builtins_not_empty(self) -> None:
-        """Test that default blocked builtins is not empty."""
-        assert len(DEFAULT_BLOCKED_BUILTINS) > 0
-        assert "eval" in DEFAULT_BLOCKED_BUILTINS
-        assert "exec" in DEFAULT_BLOCKED_BUILTINS
