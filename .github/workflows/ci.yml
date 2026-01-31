@@ -24,11 +24,11 @@ jobs:
       contents: read
       packages: write
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     outputs:
       sanitized-branch: ${{ steps.branch-name.outputs.sanitized }}
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -191,9 +191,9 @@ jobs:
       contents: read
       packages: read
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-
     container:
       # Note: env context is not available in container.image, so we use github.repository directly
       # Use sanitized branch name from build-docker job output to match built image tags
@@ -201,7 +201,6 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -209,6 +208,7 @@ jobs:
       - name: Run tests
         run: |
           echo "=== Python Version ==="
+          export PYTHONPATH="$(pwd)/src"
           python --version
 
           echo "=== Code Quality Checks ==="
@@ -226,7 +226,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       packages: write
-
     steps:
       - name: Determine branch name
         id: branch-name
@@ -338,7 +337,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
     steps:
       - name: Determine branch name
         id: branch-name
@@ -387,7 +385,6 @@ jobs:
       packages: write
       pull-requests: write
       issues: write
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
