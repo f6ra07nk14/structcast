@@ -50,15 +50,19 @@ class BasePattern(BaseModel, abc.ABC):
     model_config = ConfigDict(frozen=True, validate_default=True, extra="forbid", serialize_by_alias=True)
 
     @abc.abstractmethod
-    def build(self, result: PatternResult) -> PatternResult:
+    def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the objects from the pattern.
 
         Args:
-            result (PatternResult): The current pattern result.
+            result (Optional[PatternResult]): The current pattern result.
 
         Returns:
             PatternResult: The updated pattern result.
         """
+
+
+def _validate_pattern_result(res: Optional[PatternResult]) -> tuple[type[PatternResult], list[BasePattern], list[Any]]:
+    return (PatternResult, [], []) if res is None else (type(res), res.patterns, res.runs)
 
 
 class AddressPattern(BasePattern):
@@ -70,10 +74,10 @@ class AddressPattern(BasePattern):
     file: Optional[FilePath] = Field(None, alias="_file_")
     """Optional path to the module file."""
 
-    def build(self, result: PatternResult) -> PatternResult:
+    def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the objects from the pattern."""
-        runs = result.runs + [import_from_address(self.address, module_file=self.file)]
-        return type(result)(patterns=result.patterns + [self], runs=runs)
+        res_t, ptns, runs = _validate_pattern_result(result)
+        return res_t(patterns=ptns + [self], runs=runs + [import_from_address(self.address, module_file=self.file)])
 
 
 class AttributePattern(BasePattern):
@@ -89,14 +93,15 @@ class AttributePattern(BasePattern):
         validate_attribute(attribute)
         return attribute
 
-    def build(self, result: PatternResult) -> PatternResult:
+    def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the objects from the pattern."""
-        if not result.runs:
+        res_t, ptns, runs = _validate_pattern_result(result)
+        if not runs:
             raise InstantiationError("No object to access attribute from.")
-        runs, last = result.runs[:-1], result.runs[-1]
+        runs, last = runs[:-1], runs[-1]
         if hasattr(last, self.attribute):
-            return type(result)(patterns=result.patterns + [self], runs=runs + [getattr(last, self.attribute)])
-        msg = f'Attribute "{self.attribute}" not found in object ({last}) with previous patterns: {result.patterns}'
+            return res_t(patterns=ptns + [self], runs=runs + [getattr(last, self.attribute)])
+        msg = f'Attribute "{self.attribute}" not found in object ({last}) with previous patterns: {ptns}'
         raise InstantiationError(msg)
 
 
@@ -116,14 +121,15 @@ class CallPattern(BasePattern):
             raise ValueError(f"Invalid call pattern: {data}")
         return data
 
-    def build(self, result: PatternResult) -> PatternResult:
+    def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the objects from the pattern."""
-        if not result.runs:
+        res_t, ptns, runs = _validate_pattern_result(result)
+        if not runs:
             raise InstantiationError("No object to call.")
-        runs, last = result.runs[:-1], result.runs[-1]
+        runs, last = runs[:-1], runs[-1]
         if callable(last):
-            return type(result)(patterns=result.patterns + [self], runs=runs + [last(**instantiate(self.call))])
-        raise InstantiationError(f"Object ({last}) is not callable with previous patterns: {result.patterns}")
+            return res_t(patterns=ptns + [self], runs=runs + [last(**instantiate(self.call))])
+        raise InstantiationError(f"Object ({last}) is not callable with previous patterns: {ptns}")
 
 
 class BindPattern(BasePattern):
@@ -132,15 +138,15 @@ class BindPattern(BasePattern):
     bind: Mapping[str, Any] = Field(alias="_bind_", min_length=1)
     """The binding arguments."""
 
-    def build(self, result: PatternResult) -> PatternResult:
+    def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the objects from the pattern."""
-        if not result.runs:
+        res_t, ptns, runs = _validate_pattern_result(result)
+        if not runs:
             raise InstantiationError("No object to bind.")
-        runs, last = result.runs[:-1], result.runs[-1]
+        runs, last = runs[:-1], runs[-1]
         if callable(last):
-            run = partial(last, **instantiate(self.bind))
-            return type(result)(patterns=result.patterns + [self], runs=runs + [run])
-        raise InstantiationError(f"Object ({last}) is not callable with previous patterns: {result.patterns}")
+            return res_t(patterns=ptns + [self], runs=runs + [partial(last, **instantiate(self.bind))])
+        raise InstantiationError(f"Object ({last}) is not callable with previous patterns: {ptns}")
 
 
 class ObjectPattern(BasePattern):
@@ -157,9 +163,10 @@ class ObjectPattern(BasePattern):
             return {"_obj_": data[1:]}
         return data
 
-    def build(self, result: PatternResult) -> PatternResult:
+    def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the runnable from the pattern."""
-        new = type(result)()
+        res_t, ptns, runs = _validate_pattern_result(result)
+        new = res_t()
         try:
             for ptn in TypeAdapter(list[PatternLike]).validate_python(self.object):
                 new = ptn.build(new)
@@ -168,7 +175,7 @@ class ObjectPattern(BasePattern):
         if len(new.runs) != 1:
             msg = f"ObjectPattern did not result in a single object (got {new.runs}): {new.patterns}"
             raise InstantiationError(msg)
-        return type(result)(patterns=result.patterns + [self], runs=result.runs + new.runs)
+        return res_t(patterns=ptns + [self], runs=runs + new.runs)
 
 
 PatternLike: TypeAlias = Union[AddressPattern, AttributePattern, CallPattern, BindPattern, ObjectPattern]
@@ -196,8 +203,8 @@ def instantiate(cfg: Any) -> Any:
     if isinstance(cfg, (str, BaseModel)):
         return cfg
     if isinstance(cfg, (dict, Mapping)):
-        return {k: instantiate(v) for k, v in cfg.items()}
+        return type(cfg)(**{k: instantiate(v) for k, v in cfg.items()})
     if isinstance(cfg, (list, tuple)):
-        return [instantiate(v) for v in cfg]
+        return type(cfg)(instantiate(v) for v in cfg)
     __logger.warning(f"Unrecognized configuration type ({type(cfg)}). Returning as is.")
     return cfg
