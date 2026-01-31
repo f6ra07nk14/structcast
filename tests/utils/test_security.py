@@ -1,6 +1,7 @@
 """Tests for security features in import_from_address."""
 
 import math
+from pathlib import Path
 
 import pytest
 
@@ -72,7 +73,7 @@ class TestSecurityConfiguration:
 
     def test_custom_blocked_builtins(self) -> None:
         """Test custom blocked builtins."""
-        with configure_security_context(allowed_builtins={}):
+        with configure_security_context(allowed_builtins=set()):
             with pytest.raises(SecurityError, match="int.*blocked"):
                 import_from_address("int")
 
@@ -122,3 +123,22 @@ class TestDefaultSecuritySettings:
         assert len(DEFAULT_BLOCKED_MODULES) > 0
         assert "os" in DEFAULT_BLOCKED_MODULES
         assert "subprocess" in DEFAULT_BLOCKED_MODULES
+
+
+class TestFileLoadingSecurity:
+    """Test security improvements for file loading."""
+
+    def test_block_non_python_files(self, tmp_path: Path) -> None:
+        """Test that non-.py files are blocked."""
+        txt_file = tmp_path / "test.txt"
+        txt_file.write_text("print('hello')")
+        with pytest.raises(SecurityError, match="Module file must be a .py file"):
+            import_from_address("test", module_file=txt_file, working_dir_check=False)
+
+    def test_resolve_absolute_paths(self, tmp_path: Path) -> None:
+        """Test that paths are resolved to absolute paths."""
+        py_file = tmp_path / "test_module.py"
+        py_file.write_text("value = 42")
+        # Should work with absolute path when module is allowed
+        with configure_security_context(allowed_modules={"test_module"}):
+            assert import_from_address("value", module_file=py_file, working_dir_check=False) == 42

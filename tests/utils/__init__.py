@@ -2,9 +2,10 @@
 
 from collections.abc import Generator
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Optional
 
-from structcast.utils.base import configure_security
+from structcast.utils.base import configure_security, register_dir, unregister_dir
 
 
 @contextmanager
@@ -23,3 +24,13 @@ def configure_security_context(
         yield
     finally:
         configure_security()
+
+
+@contextmanager
+def temporary_registered_dir(path: Path) -> Generator[None, None, None]:
+    """Context manager to temporarily register a directory for imports."""
+    try:
+        register_dir(path)
+        yield
+    finally:
+        unregister_dir(path)
