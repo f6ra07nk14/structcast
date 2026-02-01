@@ -2,11 +2,10 @@
 
 import abc
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import field
 from functools import partial
 import logging
 from pathlib import Path
-import sys
 import time
 from typing import Any, Optional, Union
 
@@ -24,14 +23,12 @@ from typing_extensions import TypeAlias
 
 from structcast.core.constants import MAX_INSTANTIATION_DEPTH, MAX_INSTANTIATION_TIME
 from structcast.utils.base import import_from_address, validate_attribute
+from structcast.utils.dataclasses import dataclass
 
-__logger = logging.getLogger(__name__)
-
-# check python version to support kw_only and slots in dataclass
-__dataclass_kw = {"kw_only": True, "slots": True} if sys.version_info >= (3, 10) else {}
+logger = logging.getLogger(__name__)
 
 
-@dataclass(**__dataclass_kw, frozen=True)
+@dataclass(frozen=True)
 class PatternResult:
     """Result of pattern matching."""
 
@@ -262,5 +259,5 @@ def instantiate(cfg: Any, *, __depth__: int = 0, __start_time__: Optional[float]
     if isinstance(cfg, tuple):
         return tuple(instantiate(v, **nest_kw) for v in cfg)
     # Log warning for unrecognized types
-    __logger.warning(f"Unrecognized configuration type ({type(cfg).__name__}). Returning as is.")
+    logger.warning(f"Unrecognized configuration type ({type(cfg).__name__}). Returning as is.")
     return cfg
