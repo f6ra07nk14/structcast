@@ -3,7 +3,7 @@
 from dataclasses import field
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 from structcast.utils.constants import (
     DEFAULT_ALLOWED_BUILTINS,
@@ -46,7 +46,9 @@ class SecuritySettings:
     __allowed_directories: list[Path] = field(default_factory=list)
     __blocked_modules: set[str] = field(default_factory=lambda: DEFAULT_BLOCKED_MODULES.copy())
     __allowed_builtins: set[str] = field(default_factory=lambda: DEFAULT_ALLOWED_BUILTINS.copy())
-    __allowed_modules: set[Optional[str]] = field(default_factory=lambda: DEFAULT_ALLOWED_MODULES.copy())
+    __allowed_modules: set[Optional[str]] = field(
+        default_factory=lambda: cast(set[Optional[str]], DEFAULT_ALLOWED_MODULES.copy())
+    )
     __dangerous_dunders: set[str] = field(default_factory=lambda: DEFAULT_DANGEROUS_DUNDERS.copy())
     ascii_check: bool = True
     protected_member_check: bool = True
@@ -113,27 +115,27 @@ class SecuritySettings:
             logger.warning(f"Directory was not registered. Skip unregistering: {path}")
 
     @property
-    def allowed_directories(self) -> tuple[Path]:
+    def allowed_directories(self) -> tuple[Path, ...]:
         """Get the list of allowed directories."""
         return tuple(self.__allowed_directories)
 
     @property
-    def blocked_modules(self) -> tuple[str]:
+    def blocked_modules(self) -> tuple[str, ...]:
         """Get the set of blocked modules."""
         return tuple(self.__blocked_modules)
 
     @property
-    def allowed_builtins(self) -> tuple[str]:
+    def allowed_builtins(self) -> tuple[str, ...]:
         """Get the set of allowed builtins."""
         return tuple(self.__allowed_builtins)
 
     @property
-    def allowed_modules(self) -> tuple[Optional[str]]:
+    def allowed_modules(self) -> tuple[Optional[str], ...]:
         """Get the set of allowed modules."""
         return tuple(self.__allowed_modules)
 
     @property
-    def dangerous_dunders(self) -> tuple[str]:
+    def dangerous_dunders(self) -> tuple[str, ...]:
         """Get the set of dangerous dunder methods."""
         return tuple(self.__dangerous_dunders)
 
