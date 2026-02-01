@@ -83,6 +83,8 @@ DEFAULT_BLOCKED_MODULES = {
     "threading",  # Thread-based parallelism
     "multiprocessing",  # Process-based parallelism
     "concurrent",  # Launching parallel tasks
+    # --- Protecting Self-Import ---
+    "structcast.utils.security",  # Prevent self-import to avoid security bypass
 }
 
 # Security: Only strictly safe builtins are allowed

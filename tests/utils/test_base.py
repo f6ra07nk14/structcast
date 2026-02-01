@@ -7,16 +7,9 @@ from typing import Any
 
 import pytest
 
-from structcast.utils.base import (
-    SecurityError,
-    _resolve_path,
-    check_path,
-    import_from_address,
-    load_yaml,
-    register_dir,
-    unregister_dir,
-)
-from tests.utils import temporary_registered_dir
+from structcast.utils.base import check_path, import_from_address, load_yaml
+from structcast.utils.security import SECURITY_SETTINGS, SecurityError
+from tests.utils import configure_security_context, temporary_registered_dir
 
 
 class TestRegisterDir:
@@ -27,48 +20,48 @@ class TestRegisterDir:
         test_dir = tmp_path / "test_dir"
         test_dir.mkdir()
         # Should convert string to Path internally
-        register_dir(str(test_dir))
-        unregister_dir(test_dir)
+        SECURITY_SETTINGS.register_dir(str(test_dir))
+        SECURITY_SETTINGS.unregister_dir(test_dir)
 
     def test_register_nonexistent_directory(self, tmp_path: Path) -> None:
         """Test registering a non-existent directory raises ValueError."""
         with pytest.raises(ValueError, match="not a valid directory"):
-            register_dir(tmp_path / "nonexistent")
+            SECURITY_SETTINGS.register_dir(tmp_path / "nonexistent")
 
     def test_register_file_as_directory(self, tmp_path: Path) -> None:
         """Test registering a file instead of directory raises ValueError."""
         test_file = tmp_path / "test.txt"
         test_file.write_text("test")
         with pytest.raises(ValueError, match="not a valid directory"):
-            register_dir(test_file)
+            SECURITY_SETTINGS.register_dir(test_file)
 
     def test_register_already_registered_directory(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         """Test registering an already registered directory logs warning."""
         test_dir = tmp_path / "test_dir"
         test_dir.mkdir()
-        register_dir(test_dir)
-        register_dir(test_dir)  # Should log warning
+        SECURITY_SETTINGS.register_dir(test_dir)
+        SECURITY_SETTINGS.register_dir(test_dir)  # Should log warning
         assert "already registered" in caplog.text.lower()
-        unregister_dir(test_dir)
+        SECURITY_SETTINGS.unregister_dir(test_dir)
 
     def test_unregister_dir_with_string_path(self, tmp_path: Path) -> None:
         """Test unregistering a directory using string path."""
         test_dir = tmp_path / "test_dir"
         test_dir.mkdir()
-        register_dir(test_dir)
+        SECURITY_SETTINGS.register_dir(test_dir)
         # Should convert string to Path internally
-        unregister_dir(str(test_dir))
+        SECURITY_SETTINGS.unregister_dir(str(test_dir))
 
     def test_unregister_nonexistent_directory(self, tmp_path: Path) -> None:
         """Test unregistering a non-existent directory raises ValueError."""
         with pytest.raises(ValueError, match="not a valid directory"):
-            unregister_dir(tmp_path / "nonexistent")
+            SECURITY_SETTINGS.unregister_dir(tmp_path / "nonexistent")
 
     def test_unregister_not_registered_directory(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         """Test unregistering a non-registered directory logs warning."""
         test_dir = tmp_path / "test_dir"
         test_dir.mkdir()
-        unregister_dir(test_dir)  # Should log warning
+        SECURITY_SETTINGS.unregister_dir(test_dir)  # Should log warning
         assert "not registered" in caplog.text.lower()
 
 
@@ -137,8 +130,9 @@ class TestImportFromAddress:
 
     def test_import_nonexistent_target(self) -> None:
         """Test importing non-existent target raises ImportError."""
-        with pytest.raises(ImportError, match="not found"):
-            import_from_address("nonexistent_function_xyz", security_check=False)
+        with configure_security_context(allowed_builtins={"nonexistent_function_xyz"}):
+            with pytest.raises(ImportError, match="not found"):
+                import_from_address("nonexistent_function_xyz")
 
     def test_import_with_module_spec_none(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test import when module spec is None."""
@@ -204,36 +198,3 @@ array:
             assert result["null_value"] is None
             assert result["nested"]["key1"] == "value1"
             assert result["array"] == [1, 2, 3]
-
-
-class TestPathResolutionErrors:
-    """Test error handling in path resolution."""
-
-    def test_resolve_path_with_oserror(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """Test _resolve_path handles OSError gracefully."""
-        test_path = tmp_path / "test"
-        test_path.mkdir()
-
-        def mock_resolve(self: Path, *args: Any, **kwargs: Any) -> None:
-            raise OSError("Mock error")
-
-        monkeypatch.setattr(Path, "resolve", mock_resolve)
-        assert _resolve_path(test_path) is None
-        assert "Failed to resolve path" in caplog.text
-
-    def test_resolve_path_with_runtime_error(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """Test _resolve_path handles RuntimeError gracefully."""
-        test_path = tmp_path / "test"
-        test_path.mkdir()
-
-        # Mock resolve to raise RuntimeError
-        def mock_resolve(self: Path, *args: Any, **kwargs: Any) -> None:
-            raise RuntimeError("Mock error")
-
-        monkeypatch.setattr(Path, "resolve", mock_resolve)
-        assert _resolve_path(test_path) is None
-        assert "Failed to resolve path" in caplog.text

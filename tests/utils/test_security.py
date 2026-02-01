@@ -2,11 +2,13 @@
 
 import math
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from structcast.utils.base import SecurityError, import_from_address
+from structcast.utils.base import import_from_address
 from structcast.utils.constants import DEFAULT_BLOCKED_MODULES
+from structcast.utils.security import SecurityError, resolve_path
 from tests.utils import configure_security_context
 
 
@@ -85,10 +87,6 @@ class TestSecurityConfiguration:
             with pytest.raises(SecurityError, match="json.loads"):
                 import_from_address("json.loads")
 
-    def test_security_check_parameter(self) -> None:
-        """Test security_check parameter."""
-        assert import_from_address("eval", security_check=False) is eval
-
 
 class TestSecurityEdgeCases:
     """Test edge cases in security checks."""
@@ -142,3 +140,36 @@ class TestFileLoadingSecurity:
         # Should work with absolute path when module is allowed
         with configure_security_context(allowed_modules={"test_module"}):
             assert import_from_address("value", module_file=py_file, working_dir_check=False) == 42
+
+
+class TestPathResolutionErrors:
+    """Test error handling in path resolution."""
+
+    def test_resolve_path_with_oserror(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test _resolve_path handles OSError gracefully."""
+        test_path = tmp_path / "test"
+        test_path.mkdir()
+
+        def mock_resolve(self: Path, *args: Any, **kwargs: Any) -> None:
+            raise OSError("Mock error")
+
+        monkeypatch.setattr(Path, "resolve", mock_resolve)
+        assert resolve_path(test_path) is None
+        assert "Failed to resolve path" in caplog.text
+
+    def test_resolve_path_with_runtime_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test _resolve_path handles RuntimeError gracefully."""
+        test_path = tmp_path / "test"
+        test_path.mkdir()
+
+        # Mock resolve to raise RuntimeError
+        def mock_resolve(self: Path, *args: Any, **kwargs: Any) -> None:
+            raise RuntimeError("Mock error")
+
+        monkeypatch.setattr(Path, "resolve", mock_resolve)
+        assert resolve_path(test_path) is None
+        assert "Failed to resolve path" in caplog.text

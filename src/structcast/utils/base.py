@@ -2,115 +2,30 @@
 
 import importlib
 import importlib.util
-import logging
 from os import PathLike
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Optional, cast
+from typing import Any, Optional
 
 from ruamel.yaml import YAML
 
-from structcast.utils.constants import (
-    DEFAULT_ALLOWED_BUILTINS,
-    DEFAULT_ALLOWED_MODULES,
-    DEFAULT_BLOCKED_MODULES,
-    DEFAULT_DANGEROUS_DUNDERS,
-)
-
-__logger = logging.getLogger(__name__)
-
-# Registered directories for module searching
-__allowed_directories: list[Path] = []
-
-# Global security settings
-__blocked_modules: set[str] = DEFAULT_BLOCKED_MODULES.copy()
-__allowed_builtins: set[str] = DEFAULT_ALLOWED_BUILTINS.copy()
-__allowed_modules: set[Optional[str]] = cast(set[Optional[str]], DEFAULT_ALLOWED_MODULES.copy())
-__dangerous_dunders: set[str] = DEFAULT_DANGEROUS_DUNDERS.copy()
+from structcast.utils.security import SECURITY_SETTINGS, SecurityError, resolve_path
 
 
-class SecurityError(Exception):
-    """Exception raised when a security check fails."""
-
-
-def configure_security(
-    blocked_modules: Optional[set[str]] = None,
-    allowed_builtins: Optional[set[str]] = None,
-    allowed_modules: Optional[set[Optional[str]]] = None,
-    dangerous_dunders: Optional[set[str]] = None,
-) -> None:
-    """Configure security settings for import_from_address.
-
-    Args:
-        blocked_modules (Optional[set[str]]): Set of module names to block. If None, uses default blocked modules.
-        allowed_builtins (Optional[set[str]]): Set of builtin names to allow. If None, uses default allowed builtins.
-        allowed_modules (Optional[set[Optional[str]]]): If provided, only these modules are allowed (allowlist mode).
-            If None, uses default allowed modules. If set contains None, all modules are allowed.
-        dangerous_dunders (Optional[set[str]]): Set of dangerous dunder method names to block. If None, uses default.
-    """
-    __blocked_modules.clear()
-    __blocked_modules.update(DEFAULT_BLOCKED_MODULES if blocked_modules is None else blocked_modules)
-    __allowed_builtins.clear()
-    __allowed_builtins.update(DEFAULT_ALLOWED_BUILTINS if allowed_builtins is None else allowed_builtins)
-    __allowed_modules.clear()
-    __allowed_modules.update(DEFAULT_ALLOWED_MODULES if allowed_modules is None else allowed_modules)
-    __dangerous_dunders.clear()
-    __dangerous_dunders.update(DEFAULT_DANGEROUS_DUNDERS if dangerous_dunders is None else dangerous_dunders)
-
-
-def _resolve_path(path: Path) -> Optional[Path]:
-    # Resolve to absolute path to prevent directory traversal
-    try:
-        resolved_path = path.resolve(strict=True)
-        if resolved_path.exists():
-            return resolved_path
-    except (OSError, RuntimeError) as e:
-        __logger.warning(f"Failed to resolve path {path}: {e}")
-    return None
-
-
-def register_dir(path: PathLike) -> None:
-    """Register a directory to search for modules.
-
-    Args:
-        path (PathLike): The path to the directory to register.
-    """
-    if not isinstance(path, Path):
-        path = Path(path)
-    resolved_path = _resolve_path(path)
-    if resolved_path is None or not resolved_path.is_dir():
-        raise ValueError(f"Path is not a valid directory: {path}")
-    if resolved_path in __allowed_directories:
-        __logger.warning(f"Directory is already registered. Skip registering: {path}")
-    else:
-        __allowed_directories.append(resolved_path)
-
-
-def unregister_dir(path: PathLike) -> None:
-    """Unregister a previously registered directory.
-
-    Args:
-        path (PathLike): The path to the directory to unregister.
-    """
-    if not isinstance(path, Path):
-        path = Path(path)
-    resolved_path = _resolve_path(path)
-    if resolved_path is None or not resolved_path.is_dir():
-        raise ValueError(f"Path is not a valid directory: {path}")
-    try:
-        __allowed_directories.remove(resolved_path)
-    except ValueError:
-        __logger.warning(f"Directory was not registered. Skip unregistering: {path}")
-
-
-def check_path(path: PathLike, *, hidden_check: bool = True, working_dir_check: bool = True) -> Path:
+def check_path(
+    path: PathLike,
+    *,
+    hidden_check: Optional[bool] = None,
+    working_dir_check: Optional[bool] = None,
+) -> Path:
     """Check if a path exists, searching in registered directories if necessary.
 
     Args:
         path (PathLike): The path to check.
-        hidden_check (bool): If True, blocks paths with hidden directories (starting with '.'). Default is True.
-        working_dir_check (bool): If True, ensures that relative paths resolve within allowed directories.
-            Default is True.
+        hidden_check (Optional[bool]): Whether to block paths with hidden directories (starting with '.').
+            Default is taken from global settings.
+        working_dir_check (Optional[bool]): Whether to ensure that relative paths resolve within allowed directories.
+            Default is taken from global settings.
 
     Returns:
         Path: The resolved path.
@@ -119,18 +34,20 @@ def check_path(path: PathLike, *, hidden_check: bool = True, working_dir_check: 
         FileNotFoundError: If the path does not exist.
         SecurityError: If the path is blocked by security settings.
     """
+    hidden_check = SECURITY_SETTINGS.hidden_check if hidden_check is None else hidden_check
+    working_dir_check = SECURITY_SETTINGS.working_dir_check if working_dir_check is None else working_dir_check
     if not isinstance(path, Path):
         path = Path(path)
-    candidate: Optional[Path] = _resolve_path(path)
+    candidate: Optional[Path] = resolve_path(path)
     if not path.is_absolute():
-        allowed_directories = __allowed_directories.copy()
+        allowed_directories = list(SECURITY_SETTINGS.allowed_directories)
         while candidate is None and allowed_directories:
-            candidate = _resolve_path(allowed_directories.pop(0) / path)
+            candidate = resolve_path(allowed_directories.pop(0) / path)
     if candidate is None:
         raise FileNotFoundError(f"Path does not exist: {path}")
     if working_dir_check and not (
         (candidate.is_relative_to(Path.home()) and candidate.is_relative_to(Path.cwd()))
-        or any(candidate.is_relative_to(d) for d in __allowed_directories)
+        or any(candidate.is_relative_to(d) for d in SECURITY_SETTINGS.allowed_directories)
     ):
         raise SecurityError(f"Path is outside of allowed directories: {path}")
     if hidden_check and any(p.startswith(".") for p in candidate.parts):
@@ -174,42 +91,56 @@ def validate_import(module_name: str, target: str) -> None:
         SecurityError: If the import is blocked by security settings.
     """
     if module_name == "builtins":
-        if target not in __allowed_builtins:
+        if target not in SECURITY_SETTINGS.allowed_builtins:
             raise SecurityError(f"Blocked builtin import attempt: {target}")
-    elif None not in __allowed_modules:
-        if not any(n and (module_name == n or module_name.startswith(f"{n}.")) for n in __allowed_modules):
+    elif None not in SECURITY_SETTINGS.allowed_modules:
+        if not any(
+            n and (module_name == n or module_name.startswith(f"{n}.")) for n in SECURITY_SETTINGS.allowed_modules
+        ):
             raise SecurityError(f"Blocked import attempt (not in allowlist): {module_name}.{target}")
-    if any(n and (module_name == n or module_name.startswith(f"{n}.")) for n in __blocked_modules):
+    if any(n and (module_name == n or module_name.startswith(f"{n}.")) for n in SECURITY_SETTINGS.blocked_modules):
         raise SecurityError(f"Blocked import attempt (blocklisted): {module_name}.{target}")
 
 
 def validate_attribute(
     target: str,
     *,
-    protected_member_check: bool = True,
-    private_member_check: bool = True,
-    ascii_check: bool = True,
+    protected_member_check: Optional[bool] = None,
+    private_member_check: Optional[bool] = None,
+    ascii_check: Optional[bool] = None,
 ) -> None:
     """Validate that an attribute access is safe.
 
     Args:
         target (str): The attribute name to access.
-        protected_member_check (bool): If True, blocks access to protected members (starting with '_'). Default is True.
-        private_member_check (bool): If True, blocks access to private members (starting with '__'). Default is True.
-        ascii_check (bool): If True, blocks non-ascii attribute names. Default is True.
+        protected_member_check (Optional[bool]): Whether to block access to protected members (starting with '_').
+            Default is taken from global settings.
+        private_member_check (Optional[bool]): Whether to block access to private members (starting with '__').
+            Default is taken from global settings.
+        ascii_check (Optional[bool]): Whether to block access to non-ASCII attribute names.
+            Default is taken from global settings.
 
     Raises:
         SecurityError: If the attribute access is blocked by security settings.
     """
+    ascii_check = SECURITY_SETTINGS.ascii_check if ascii_check is None else ascii_check
+    protected_member_check = (
+        SECURITY_SETTINGS.protected_member_check if protected_member_check is None else protected_member_check
+    )
+    private_member_check = (
+        SECURITY_SETTINGS.private_member_check if private_member_check is None else private_member_check
+    )
     if not target.isidentifier() or target != target.strip():
         raise SecurityError(f"Invalid attribute access attempt: {repr(target)}")
     if ascii_check and not target.isascii():
         raise SecurityError(f"Non-ASCII attribute access attempt: {repr(target)}")
-    if target in __dangerous_dunders:
+    if target in SECURITY_SETTINGS.dangerous_dunders:
         raise SecurityError(f"Dangerous dunder access attempt: {repr(target)}")
-    if private_member_check and target.startswith("__"):
+    is_private = target.startswith("__")
+    is_protected = target.startswith("_") and not is_private
+    if private_member_check and is_private:
         raise SecurityError(f"Private member access attempt: {repr(target)}")
-    elif protected_member_check and target.startswith("_"):
+    elif protected_member_check and is_protected:
         raise SecurityError(f"Protected member access attempt: {repr(target)}")
 
 
@@ -218,12 +149,11 @@ def import_from_address(
     *,
     default_module: Optional[ModuleType] = None,
     module_file: Optional[PathLike] = None,
-    security_check: bool = True,
-    hidden_check: bool = True,
-    working_dir_check: bool = True,
-    protected_member_check: bool = True,
-    private_member_check: bool = True,
-    ascii_check: bool = True,
+    hidden_check: Optional[bool] = None,
+    working_dir_check: Optional[bool] = None,
+    protected_member_check: Optional[bool] = None,
+    private_member_check: Optional[bool] = None,
+    ascii_check: Optional[bool] = None,
 ) -> Any:
     """Import target from address.
 
@@ -241,13 +171,16 @@ def import_from_address(
         default_module (Optional[ModuleType]): The default module to use if the module is not specified in the address.
             Default is None, which means the built-in module will be used.
         module_file (Optional[PathLike]): Optional path to a module file to load the module from.
-        security_check (bool): If True, performs security checks. Use with extreme caution. Default is True.
-        hidden_check (bool): If True, blocks paths with hidden directories (starting with '.'). Default is True.
-        working_dir_check (bool): If True, ensures that relative paths resolve within allowed directories.
-            Default is True.
-        protected_member_check (bool): If True, blocks access to protected members (starting with '_'). Default is True.
-        private_member_check (bool): If True, blocks access to private members (starting with '__'). Default is True.
-        ascii_check (bool): If True, blocks non-ascii attribute names. Default is True.
+        hidden_check (Optional[bool]): Whether to block paths with hidden directories (starting with '.').
+            Default is taken from global settings.
+        working_dir_check (Optional[bool]): Whether to ensure that relative paths resolve within allowed directories.
+            Default is taken from global settings.
+        protected_member_check (Optional[bool]): Whether to block access to protected members (starting with '_').
+            Default is taken from global settings.
+        private_member_check (Optional[bool]): Whether to block access to private members (starting with '__').
+            Default is taken from global settings.
+        ascii_check (Optional[bool]): Whether to block access to non-ASCII attribute names.
+            Default is taken from global settings.
 
     Returns:
         Any: The imported target.
@@ -262,11 +195,7 @@ def import_from_address(
     else:
         module_name, target = None, address
     if module_file is not None:
-        module_file = check_path(
-            module_file,
-            hidden_check=security_check and hidden_check,
-            working_dir_check=security_check and working_dir_check,
-        )
+        module_file = check_path(module_file, hidden_check=hidden_check, working_dir_check=working_dir_check)
         module_name = module_name or module_file.stem
         module = _load_module(module_name, module_file)
     elif module_name is not None:
@@ -275,27 +204,36 @@ def import_from_address(
         module, module_name = importlib.import_module("builtins"), "builtins"
     else:
         module, module_name = default_module, default_module.__name__
-    if security_check:
-        validate_import(module_name, target)
-        validate_attribute(
-            target,
-            protected_member_check=protected_member_check,
-            private_member_check=private_member_check,
-            ascii_check=ascii_check,
-        )
+    validate_import(module_name, target)
+    validate_attribute(
+        target,
+        protected_member_check=protected_member_check,
+        private_member_check=private_member_check,
+        ascii_check=ascii_check,
+    )
     if hasattr(module, target):
         return getattr(module, target)
     raise ImportError(f'Target "{target}" not found in module "{module_name}".')
 
 
-def load_yaml(yaml_file: PathLike) -> dict[str, Any]:
+def load_yaml(
+    yaml_file: PathLike,
+    *,
+    hidden_check: Optional[bool] = None,
+    working_dir_check: Optional[bool] = None,
+) -> dict[str, Any]:
     """Load a yaml file.
 
     Args:
         yaml_file (PathLike): Path to the yaml file.
+        hidden_check (Optional[bool]): Whether to block paths with hidden directories (starting with '.').
+            Default is taken from global settings.
+        working_dir_check (Optional[bool]): Whether to ensure that relative paths resolve within allowed directories.
+            Default is taken from global settings.
 
     Returns:
         Loaded yaml file.
     """
-    with open(check_path(yaml_file), encoding="utf-8") as fin:
+    yaml_file = check_path(yaml_file, hidden_check=hidden_check, working_dir_check=working_dir_check)
+    with open(yaml_file, encoding="utf-8") as fin:
         return YAML(typ="safe", pure=True).load(fin)  # YAML 1.2 support
