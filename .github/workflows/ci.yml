@@ -92,7 +92,7 @@ jobs:
         run: |
           BRANCH_NAME="${{ steps.branch-name.outputs.sanitized }}"
           PY_VERSION="${{ matrix.python-version }}"
-          IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${BRANCH_NAME}-py${PY_VERSION}-latest"
+          IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${BRANCH_NAME}-py${PY_VERSION}"
           echo "Checking for image: ${IMAGE_TAG}"
 
           if docker pull "${IMAGE_TAG}" 2>/dev/null; then
@@ -134,13 +134,8 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=${{ steps.branch-name.outputs.sanitized }}-py${{ matrix.python-version }}-{{sha}}
-            type=raw,value=${{ steps.branch-name.outputs.sanitized }}-py${{ matrix.python-version }}-latest
-          flavor: |
-            latest=false
-          # Note: Using centralized sanitized branch-name output for consistent tagging
-          # {{sha}} is automatically truncated to 7 characters by the metadata action
+          tags: type=raw,value=${{ steps.branch-name.outputs.sanitized }}-py${{ matrix.python-version }}
+          flavor: latest=false
 
       - name: Build and push Docker image
         if: steps.should-build.outputs.build-needed == 'true' || steps.check-image.outputs.exists == 'false'
@@ -166,14 +161,14 @@ jobs:
           echo "Branch: ${BRANCH_NAME}"
           echo "Python: ${PY_VERSION}"
           echo "Build performed: ${BUILD_NEEDED}"
-          echo "Latest tag: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${BRANCH_NAME}-py${PY_VERSION}-latest"
+          echo "Latest tag: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${BRANCH_NAME}-py${PY_VERSION}"
           echo "====================="
 
       - name: Verify Docker image
         run: |
           BRANCH_NAME="${{ steps.branch-name.outputs.sanitized }}"
           PY_VERSION="${{ matrix.python-version }}"
-          IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${BRANCH_NAME}-py${PY_VERSION}-latest"
+          IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${BRANCH_NAME}-py${PY_VERSION}"
 
           echo "Verifying image: ${IMAGE_TAG}"
           if docker pull "${IMAGE_TAG}" 2>/dev/null; then
@@ -197,7 +192,7 @@ jobs:
     container:
       # Note: env context is not available in container.image, so we use github.repository directly
       # Use sanitized branch name from build-docker job output to match built image tags
-      image: ghcr.io/${{ github.repository }}:${{ needs.build-docker.outputs.sanitized-branch }}-py${{ matrix.python-version }}-latest
+      image: ghcr.io/${{ github.repository }}:${{ needs.build-docker.outputs.sanitized-branch }}-py${{ matrix.python-version }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
