@@ -106,18 +106,6 @@ def convert_spec(raw: Optional[Union[str, int, float, bool, bytes]]) -> tuple[An
 SPEC_SETTINGS.resolvers["constant"] = (SPEC_CONSTANT, lambda x: x)
 
 
-def _convert_structured_spec(raw: Any) -> Any:
-    if isinstance(raw, dict):
-        return {k: _convert_structured_spec(v) for k, v in raw.items()}
-    if isinstance(raw, Mapping):
-        return type(raw)(**{k: _convert_structured_spec(v) for k, v in raw.items()})
-    if isinstance(raw, (list, tuple)):
-        return type(raw)(_convert_structured_spec(v) for v in raw)
-    if isinstance(raw, (str, int, float, bool)) or raw is None:
-        return convert_spec(raw)
-    raise SpecConversionError(f"Unsupported specification type: {type(raw)}")
-
-
 def convert_structured_spec(raw: Any) -> Any:
     """Convert a structured specification into a resolved format.
 
@@ -130,7 +118,15 @@ def convert_structured_spec(raw: Any) -> Any:
     Raises:
         SpecConversionError: If the specification format is invalid.
     """
-    return _convert_structured_spec(raw)
+    if isinstance(raw, (str, int, float, bool, bytes)) or raw is None:
+        return convert_spec(raw)
+    if isinstance(raw, dict):
+        return {k: convert_structured_spec(v) for k, v in raw.items()}
+    if isinstance(raw, Mapping):
+        return type(raw)(**{k: convert_structured_spec(v) for k, v in raw.items()})
+    if isinstance(raw, (list, tuple)):
+        return type(raw)(convert_structured_spec(v) for v in raw)
+    raise SpecConversionError(f"Unsupported specification type: {type(raw)}")
 
 
 def _str_index(index: Union[int, str]) -> str:
@@ -336,7 +332,7 @@ class Spec(BaseModel):
 
     @field_validator("pipe", mode="before")
     @classmethod
-    def validate_pipe(cls, pipe: Any) -> Any:
+    def validate_pipe(cls, pipe: Any) -> list[ObjectPattern]:
         """Validate the pipe field."""
         return check_elements(TypeAdapter(Optional[Union[ObjectPattern, list[ObjectPattern]]]).validate_python(pipe))
 
