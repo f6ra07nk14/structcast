@@ -2,7 +2,6 @@
 
 from importlib import import_module
 from importlib.util import module_from_spec, spec_from_file_location
-from os import PathLike
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Optional
@@ -10,6 +9,7 @@ from typing import Any, Optional
 from ruamel.yaml import YAML
 
 from structcast.utils.security import SecurityError, check_path, validate_attribute, validate_import
+from structcast.utils.types import PathLike
 
 
 def __load_module(module_name: str, module_file: Path) -> ModuleType:
