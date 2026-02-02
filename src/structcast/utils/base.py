@@ -99,7 +99,7 @@ def import_from_address(
         module, module_name = default_module, default_module.__name__
     validate_import(module_name, target)
     validate_attribute(
-        target,
+        f"{module_name}.{target}",
         protected_member_check=protected_member_check,
         private_member_check=private_member_check,
         ascii_check=ascii_check,
