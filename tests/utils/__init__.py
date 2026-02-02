@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
-from structcast.utils.security import SECURITY_SETTINGS
+from structcast.utils.security import configure_security, register_dir, unregister_dir
 
 
 @contextmanager
@@ -16,21 +16,21 @@ def configure_security_context(
 ) -> Generator[None, None, None]:
     """Context manager to temporarily configure security settings."""
     try:
-        SECURITY_SETTINGS.configure_security(
+        configure_security(
             allowed_modules=allowed_modules,
             blocked_modules=blocked_modules,
             allowed_builtins=allowed_builtins,
         )
         yield
     finally:
-        SECURITY_SETTINGS.configure_security()
+        configure_security()
 
 
 @contextmanager
 def temporary_registered_dir(path: Path) -> Generator[None, None, None]:
     """Context manager to temporarily register a directory for imports."""
     try:
-        SECURITY_SETTINGS.register_dir(path)
+        register_dir(path)
         yield
     finally:
-        SECURITY_SETTINGS.unregister_dir(path)
+        unregister_dir(path)

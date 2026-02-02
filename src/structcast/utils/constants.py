@@ -1,6 +1,8 @@
 """Constants for StructCast utilities."""
 
-DEFAULT_ALLOWED_MODULES: set[str] = {
+from typing import Optional
+
+DEFAULT_ALLOWED_MODULES: set[Optional[str]] = {
     # --- Core Data Structures ---
     "collections",
     "datetime",
@@ -26,7 +28,7 @@ DEFAULT_ALLOWED_MODULES: set[str] = {
 }
 
 # Security: Dangerous modules that should be blocked by default
-DEFAULT_BLOCKED_MODULES = {
+DEFAULT_BLOCKED_MODULES: set[str] = {
     # --- System & Process Management ---
     "os",  # Operating system interfaces (file system, process management)
     "subprocess",  # Spawning new processes
@@ -88,7 +90,7 @@ DEFAULT_BLOCKED_MODULES = {
 }
 
 # Security: Only strictly safe builtins are allowed
-DEFAULT_ALLOWED_BUILTINS = {
+DEFAULT_ALLOWED_BUILTINS: set[str] = {
     # --- Data Types (Constructors) ---
     "bool",
     "int",
@@ -142,7 +144,7 @@ DEFAULT_ALLOWED_BUILTINS = {
 }
 
 # Security: Dangerous dunder methods that should be blocked by default
-DEFAULT_DANGEROUS_DUNDERS = {
+DEFAULT_DANGEROUS_DUNDERS: set[str] = {
     "__subclasses__",
     "__bases__",
     "__globals__",

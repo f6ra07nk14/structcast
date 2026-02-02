@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from structcast.utils.base import check_path, import_from_address, load_yaml
-from structcast.utils.security import SECURITY_SETTINGS, SecurityError
+from structcast.utils.security import SecurityError, register_dir, unregister_dir
 from tests.utils import configure_security_context, temporary_registered_dir
 
 
@@ -20,48 +20,48 @@ class TestRegisterDir:
         test_dir = tmp_path / "test_dir"
         test_dir.mkdir()
         # Should convert string to Path internally
-        SECURITY_SETTINGS.register_dir(str(test_dir))
-        SECURITY_SETTINGS.unregister_dir(test_dir)
+        register_dir(str(test_dir))
+        unregister_dir(test_dir)
 
     def test_register_nonexistent_directory(self, tmp_path: Path) -> None:
         """Test registering a non-existent directory raises ValueError."""
         with pytest.raises(ValueError, match="not a valid directory"):
-            SECURITY_SETTINGS.register_dir(tmp_path / "nonexistent")
+            register_dir(tmp_path / "nonexistent")
 
     def test_register_file_as_directory(self, tmp_path: Path) -> None:
         """Test registering a file instead of directory raises ValueError."""
         test_file = tmp_path / "test.txt"
         test_file.write_text("test")
         with pytest.raises(ValueError, match="not a valid directory"):
-            SECURITY_SETTINGS.register_dir(test_file)
+            register_dir(test_file)
 
     def test_register_already_registered_directory(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         """Test registering an already registered directory logs warning."""
         test_dir = tmp_path / "test_dir"
         test_dir.mkdir()
-        SECURITY_SETTINGS.register_dir(test_dir)
-        SECURITY_SETTINGS.register_dir(test_dir)  # Should log warning
+        register_dir(test_dir)
+        register_dir(test_dir)  # Should log warning
         assert "already registered" in caplog.text.lower()
-        SECURITY_SETTINGS.unregister_dir(test_dir)
+        unregister_dir(test_dir)
 
     def test_unregister_dir_with_string_path(self, tmp_path: Path) -> None:
         """Test unregistering a directory using string path."""
         test_dir = tmp_path / "test_dir"
         test_dir.mkdir()
-        SECURITY_SETTINGS.register_dir(test_dir)
+        register_dir(test_dir)
         # Should convert string to Path internally
-        SECURITY_SETTINGS.unregister_dir(str(test_dir))
+        unregister_dir(str(test_dir))
 
     def test_unregister_nonexistent_directory(self, tmp_path: Path) -> None:
         """Test unregistering a non-existent directory raises ValueError."""
         with pytest.raises(ValueError, match="not a valid directory"):
-            SECURITY_SETTINGS.unregister_dir(tmp_path / "nonexistent")
+            unregister_dir(tmp_path / "nonexistent")
 
     def test_unregister_not_registered_directory(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         """Test unregistering a non-registered directory logs warning."""
         test_dir = tmp_path / "test_dir"
         test_dir.mkdir()
-        SECURITY_SETTINGS.unregister_dir(test_dir)  # Should log warning
+        unregister_dir(test_dir)  # Should log warning
         assert "not registered" in caplog.text.lower()
 
 

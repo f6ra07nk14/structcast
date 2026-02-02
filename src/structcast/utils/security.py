@@ -3,7 +3,7 @@
 from dataclasses import field
 import logging
 from pathlib import Path
-from typing import Optional, cast
+from typing import Optional
 
 from structcast.utils.constants import (
     DEFAULT_ALLOWED_BUILTINS,
@@ -43,105 +43,80 @@ def resolve_path(path: Path) -> Optional[Path]:
 class SecuritySettings:
     """Settings for security-related restrictions."""
 
-    __allowed_directories: list[Path] = field(default_factory=list)
-    __blocked_modules: set[str] = field(default_factory=lambda: DEFAULT_BLOCKED_MODULES.copy())
-    __allowed_builtins: set[str] = field(default_factory=lambda: DEFAULT_ALLOWED_BUILTINS.copy())
-    __allowed_modules: set[Optional[str]] = field(
-        default_factory=lambda: cast(set[Optional[str]], DEFAULT_ALLOWED_MODULES.copy())
-    )
-    __dangerous_dunders: set[str] = field(default_factory=lambda: DEFAULT_DANGEROUS_DUNDERS.copy())
+    allowed_directories: list[Path] = field(default_factory=list)
+    blocked_modules: set[str] = field(default_factory=lambda: DEFAULT_BLOCKED_MODULES.copy())
+    allowed_builtins: set[str] = field(default_factory=lambda: DEFAULT_ALLOWED_BUILTINS.copy())
+    allowed_modules: set[Optional[str]] = field(default_factory=lambda: DEFAULT_ALLOWED_MODULES.copy())
+    dangerous_dunders: set[str] = field(default_factory=lambda: DEFAULT_DANGEROUS_DUNDERS.copy())
     ascii_check: bool = True
     protected_member_check: bool = True
     private_member_check: bool = True
     hidden_check: bool = True
     working_dir_check: bool = True
 
-    def configure_security(
-        self,
-        blocked_modules: Optional[set[str]] = None,
-        allowed_builtins: Optional[set[str]] = None,
-        allowed_modules: Optional[set[Optional[str]]] = None,
-        dangerous_dunders: Optional[set[str]] = None,
-    ) -> None:
-        """Configure security settings for import_from_address.
 
-        Args:
-            blocked_modules (Optional[set[str]]): Set of module names to block. If None, use default blocked modules.
-            allowed_builtins (Optional[set[str]]): Set of builtin names to allow. If None, use default allowed builtins.
-            allowed_modules (Optional[set[Optional[str]]]): Set of module names to allow.
-                If None, use default allowed modules. If set to an empty set, all modules are blocked.
-                If set to None, all modules except blocked ones are allowed.
-            dangerous_dunders (Optional[set[str]]): Set of dangerous dunder method names to block. If None, use default.
-        """
-        self.__blocked_modules.clear()
-        self.__blocked_modules.update(DEFAULT_BLOCKED_MODULES if blocked_modules is None else blocked_modules)
-        self.__allowed_builtins.clear()
-        self.__allowed_builtins.update(DEFAULT_ALLOWED_BUILTINS if allowed_builtins is None else allowed_builtins)
-        self.__allowed_modules.clear()
-        self.__allowed_modules.update(DEFAULT_ALLOWED_MODULES if allowed_modules is None else allowed_modules)
-        self.__dangerous_dunders.clear()
-        self.__dangerous_dunders.update(DEFAULT_DANGEROUS_DUNDERS if dangerous_dunders is None else dangerous_dunders)
-
-    def register_dir(self, path: PathLike) -> None:
-        """Register a directory to search for modules.
-
-        Args:
-            path (PathLike): The path to the directory to register.
-        """
-        if not isinstance(path, Path):
-            path = Path(path)
-        resolved_path = resolve_path(path)
-        if resolved_path is None or not resolved_path.is_dir():
-            raise ValueError(f"Path is not a valid directory: {path}")
-        if resolved_path in self.__allowed_directories:
-            logger.warning(f"Directory is already registered. Skip registering: {path}")
-        else:
-            self.__allowed_directories.append(resolved_path)
-
-    def unregister_dir(self, path: PathLike) -> None:
-        """Unregister a previously registered directory.
-
-        Args:
-            path (PathLike): The path to the directory to unregister.
-        """
-        if not isinstance(path, Path):
-            path = Path(path)
-        resolved_path = resolve_path(path)
-        if resolved_path is None or not resolved_path.is_dir():
-            raise ValueError(f"Path is not a valid directory: {path}")
-        try:
-            self.__allowed_directories.remove(resolved_path)
-        except ValueError:
-            logger.warning(f"Directory was not registered. Skip unregistering: {path}")
-
-    @property
-    def allowed_directories(self) -> tuple[Path, ...]:
-        """Get the list of allowed directories."""
-        return tuple(self.__allowed_directories)
-
-    @property
-    def blocked_modules(self) -> tuple[str, ...]:
-        """Get the set of blocked modules."""
-        return tuple(self.__blocked_modules)
-
-    @property
-    def allowed_builtins(self) -> tuple[str, ...]:
-        """Get the set of allowed builtins."""
-        return tuple(self.__allowed_builtins)
-
-    @property
-    def allowed_modules(self) -> tuple[Optional[str], ...]:
-        """Get the set of allowed modules."""
-        return tuple(self.__allowed_modules)
-
-    @property
-    def dangerous_dunders(self) -> tuple[str, ...]:
-        """Get the set of dangerous dunder methods."""
-        return tuple(self.__dangerous_dunders)
-
-
-SECURITY_SETTINGS = SecuritySettings()
+__settings = SecuritySettings()
 """Global security settings instance."""
+
+
+def configure_security(
+    blocked_modules: Optional[set[str]] = None,
+    allowed_builtins: Optional[set[str]] = None,
+    allowed_modules: Optional[set[Optional[str]]] = None,
+    dangerous_dunders: Optional[set[str]] = None,
+) -> None:
+    """Configure security settings for import_from_address.
+
+    Args:
+        blocked_modules (Optional[set[str]]): Set of module names to block. If None, use default blocked modules.
+        allowed_builtins (Optional[set[str]]): Set of builtin names to allow. If None, use default allowed builtins.
+        allowed_modules (Optional[set[Optional[str]]]): Set of module names to allow.
+            If None, use default allowed modules. If set to an empty set, all modules are blocked.
+            If set to None, all modules except blocked ones are allowed.
+        dangerous_dunders (Optional[set[str]]): Set of dangerous dunder method names to block. If None, use default.
+    """
+    __settings.blocked_modules.clear()
+    __settings.blocked_modules.update(DEFAULT_BLOCKED_MODULES if blocked_modules is None else blocked_modules)
+    __settings.allowed_builtins.clear()
+    __settings.allowed_builtins.update(DEFAULT_ALLOWED_BUILTINS if allowed_builtins is None else allowed_builtins)
+    __settings.allowed_modules.clear()
+    __settings.allowed_modules.update(DEFAULT_ALLOWED_MODULES if allowed_modules is None else allowed_modules)
+    __settings.dangerous_dunders.clear()
+    __settings.dangerous_dunders.update(DEFAULT_DANGEROUS_DUNDERS if dangerous_dunders is None else dangerous_dunders)
+
+
+def register_dir(path: PathLike) -> None:
+    """Register a directory to search for modules.
+
+    Args:
+        path (PathLike): The path to the directory to register.
+    """
+    if not isinstance(path, Path):
+        path = Path(path)
+    resolved_path = resolve_path(path)
+    if resolved_path is None or not resolved_path.is_dir():
+        raise ValueError(f"Path is not a valid directory: {path}")
+    if resolved_path in __settings.allowed_directories:
+        logger.warning(f"Directory is already registered. Skip registering: {path}")
+    else:
+        __settings.allowed_directories.append(resolved_path)
+
+
+def unregister_dir(path: PathLike) -> None:
+    """Unregister a previously registered directory.
+
+    Args:
+        path (PathLike): The path to the directory to unregister.
+    """
+    if not isinstance(path, Path):
+        path = Path(path)
+    resolved_path = resolve_path(path)
+    if resolved_path is None or not resolved_path.is_dir():
+        raise ValueError(f"Path is not a valid directory: {path}")
+    try:
+        __settings.allowed_directories.remove(resolved_path)
+    except ValueError:
+        logger.warning(f"Directory was not registered. Skip unregistering: {path}")
 
 
 def validate_import(module_name: str, target: str) -> None:
@@ -155,14 +130,12 @@ def validate_import(module_name: str, target: str) -> None:
         SecurityError: If the import is blocked by security settings.
     """
     if module_name == "builtins":
-        if target not in SECURITY_SETTINGS.allowed_builtins:
+        if target not in __settings.allowed_builtins:
             raise SecurityError(f"Blocked builtin import attempt: {target}")
-    elif None not in SECURITY_SETTINGS.allowed_modules:
-        if not any(
-            n and (module_name == n or module_name.startswith(f"{n}.")) for n in SECURITY_SETTINGS.allowed_modules
-        ):
+    elif None not in __settings.allowed_modules:
+        if not any(n and (module_name == n or module_name.startswith(f"{n}.")) for n in __settings.allowed_modules):
             raise SecurityError(f"Blocked import attempt (not in allowlist): {module_name}.{target}")
-    if any(n and (module_name == n or module_name.startswith(f"{n}.")) for n in SECURITY_SETTINGS.blocked_modules):
+    if any(n and (module_name == n or module_name.startswith(f"{n}.")) for n in __settings.blocked_modules):
         raise SecurityError(f"Blocked import attempt (blocklisted): {module_name}.{target}")
 
 
@@ -187,18 +160,16 @@ def validate_attribute(
     Raises:
         SecurityError: If the attribute access is blocked by security settings.
     """
-    ascii_check = SECURITY_SETTINGS.ascii_check if ascii_check is None else ascii_check
+    ascii_check = __settings.ascii_check if ascii_check is None else ascii_check
     protected_member_check = (
-        SECURITY_SETTINGS.protected_member_check if protected_member_check is None else protected_member_check
+        __settings.protected_member_check if protected_member_check is None else protected_member_check
     )
-    private_member_check = (
-        SECURITY_SETTINGS.private_member_check if private_member_check is None else private_member_check
-    )
+    private_member_check = __settings.private_member_check if private_member_check is None else private_member_check
     if not target.isidentifier() or target != target.strip():
         raise SecurityError(f"Invalid attribute access attempt: {repr(target)}")
     if ascii_check and not target.isascii():
         raise SecurityError(f"Non-ASCII attribute access attempt: {repr(target)}")
-    if target in SECURITY_SETTINGS.dangerous_dunders:
+    if target in __settings.dangerous_dunders:
         raise SecurityError(f"Dangerous dunder access attempt: {repr(target)}")
     is_private = target.startswith("__")
     is_protected = target.startswith("_") and not is_private
@@ -230,20 +201,20 @@ def check_path(
         FileNotFoundError: If the path does not exist.
         SecurityError: If the path is blocked by security settings.
     """
-    hidden_check = SECURITY_SETTINGS.hidden_check if hidden_check is None else hidden_check
-    working_dir_check = SECURITY_SETTINGS.working_dir_check if working_dir_check is None else working_dir_check
+    hidden_check = __settings.hidden_check if hidden_check is None else hidden_check
+    working_dir_check = __settings.working_dir_check if working_dir_check is None else working_dir_check
     if not isinstance(path, Path):
         path = Path(path)
     candidate: Optional[Path] = resolve_path(path)
     if not path.is_absolute():
-        allowed_directories = list(SECURITY_SETTINGS.allowed_directories)
+        allowed_directories = __settings.allowed_directories.copy()
         while candidate is None and allowed_directories:
             candidate = resolve_path(allowed_directories.pop(0) / path)
     if candidate is None:
         raise FileNotFoundError(f"Path does not exist: {path}")
     if working_dir_check and not (
         (candidate.is_relative_to(Path.home()) and candidate.is_relative_to(Path.cwd()))
-        or any(candidate.is_relative_to(d) for d in SECURITY_SETTINGS.allowed_directories)
+        or any(candidate.is_relative_to(d) for d in __settings.allowed_directories)
     ):
         raise SecurityError(f"Path is outside of allowed directories: {path}")
     if hidden_check and any(p.startswith(".") for p in candidate.parts):
