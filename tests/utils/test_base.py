@@ -1,9 +1,9 @@
 """Tests for StructCast utilities."""
 
-import importlib.util
 import math
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -136,15 +136,15 @@ class TestImportFromAddress:
 
     def test_import_with_module_spec_none(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test import when module spec is None."""
-        test_file = tmp_path / "test_module.py"
-        test_file.write_text("value = 42")
 
         def mock_spec(*args: Any, **kwargs: Any) -> None:
             return None
 
-        monkeypatch.setattr(importlib.util, "spec_from_file_location", mock_spec)
-        with pytest.raises(ImportError, match="Cannot load module"):
-            import_from_address("value", module_file=test_file, working_dir_check=False)
+        test_file = tmp_path / "test_module.py"
+        test_file.write_text("value = 42")
+        with patch("structcast.utils.base.spec_from_file_location", side_effect=mock_spec):
+            with pytest.raises(ImportError, match="Cannot load module"):
+                import_from_address("value", module_file=test_file, working_dir_check=False)
 
 
 class TestLoadYAML:

@@ -577,13 +577,13 @@ class TestTimeoutProtection:
     def test_instantiate_respects_timeout(self) -> None:
         """Test that instantiate enforces timeout limit."""
         # Create a configuration that will take longer than allowed by mocking time to simulate elapsed time
-        with patch("time.time", side_effect=MockTime(2, time.time)):
+        with patch("structcast.core.instantiation.time", side_effect=MockTime(2, time.time)):
             with pytest.raises(InstantiationError, match="Maximum instantiation time exceeded"):
                 instantiate({"a": 1, "b": 2, "c": 3})
 
     def test_instantiate_timeout_propagates_through_nested_calls(self) -> None:
         """Test that timeout is checked in nested instantiation."""
-        with patch("time.time", side_effect=MockTime(3, time.time)):
+        with patch("structcast.core.instantiation.time", side_effect=MockTime(3, time.time)):
             with pytest.raises(InstantiationError, match="Maximum instantiation time exceeded"):
                 instantiate({"outer": {"inner": {"deep": {"value": 42}}}})
 

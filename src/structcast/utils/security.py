@@ -1,7 +1,7 @@
 """Security-related utilities and settings for structcast."""
 
 from dataclasses import field
-import logging
+from logging import getLogger
 from pathlib import Path
 from typing import Optional
 
@@ -14,7 +14,7 @@ from structcast.utils.constants import (
 from structcast.utils.dataclasses import dataclass
 from structcast.utils.types import PathLike
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 class SecurityError(Exception):

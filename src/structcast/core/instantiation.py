@@ -1,12 +1,12 @@
 """Core instantiation logic for StructCast."""
 
-import abc
+from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import field
 from functools import partial
-import logging
+from logging import getLogger
 from pathlib import Path
-import time
+from time import time
 from typing import Any, Optional, Union
 
 from pydantic import (
@@ -25,7 +25,7 @@ from structcast.core.constants import MAX_INSTANTIATION_DEPTH, MAX_INSTANTIATION
 from structcast.utils.base import import_from_address, validate_attribute
 from structcast.utils.dataclasses import dataclass
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 class InstantiationError(Exception):
@@ -45,16 +45,16 @@ class PatternResult:
     depth: int = 0
     """Current recursion depth for security checks."""
 
-    start_time: float = field(default_factory=time.time)
+    start_time: float = field(default_factory=time)
     """Start time of instantiation for timeout checks."""
 
 
-class BasePattern(BaseModel, abc.ABC):
+class BasePattern(BaseModel, ABC):
     """Base class for pattern matching."""
 
     model_config = ConfigDict(frozen=True, validate_default=True, extra="forbid", serialize_by_alias=True)
 
-    @abc.abstractmethod
+    @abstractmethod
     def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the objects from the pattern.
 
@@ -75,12 +75,12 @@ def _validate_pattern_result(
         Tuple of (result_type, patterns, runs, depth, start_time)
     """
     if res is None:
-        return PatternResult, [], [], 0, time.time()
+        return PatternResult, [], [], 0, time()
     # Security check: enforce depth limit
     if res.depth >= MAX_INSTANTIATION_DEPTH:
         raise InstantiationError(f"Maximum instantiation depth exceeded: {MAX_INSTANTIATION_DEPTH}")
     # Security check: enforce timeout
-    if (time.time() - res.start_time) > MAX_INSTANTIATION_TIME:
+    if (time() - res.start_time) > MAX_INSTANTIATION_TIME:
         raise InstantiationError(f"Maximum instantiation time exceeded: {MAX_INSTANTIATION_TIME} seconds")
     return type(res), res.patterns, res.runs, res.depth, res.start_time
 
@@ -231,12 +231,12 @@ def instantiate(cfg: Any, *, __depth__: int = 0, __start_time__: Optional[float]
     """
     # Initialize start time on first call
     if __start_time__ is None:
-        __start_time__ = time.time()
+        __start_time__ = time()
     # Security check: recursion depth
     if __depth__ >= MAX_INSTANTIATION_DEPTH:
         raise InstantiationError(f"Maximum instantiation depth exceeded: {MAX_INSTANTIATION_DEPTH}")
     # Security check: timeout
-    if (time.time() - __start_time__) > MAX_INSTANTIATION_TIME:
+    if (time() - __start_time__) > MAX_INSTANTIATION_TIME:
         raise InstantiationError(f"Maximum instantiation time exceeded: {MAX_INSTANTIATION_TIME} seconds")
     # Security check: primitive types that are safe to return as-is
     if isinstance(cfg, (int, float, bool, bytes, Path, type(None))):

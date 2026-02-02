@@ -1,7 +1,7 @@
 """Base utility functions for StructCast."""
 
-import importlib
-import importlib.util
+from importlib import import_module
+from importlib.util import module_from_spec, spec_from_file_location
 from os import PathLike
 from pathlib import Path
 from types import ModuleType
@@ -29,10 +29,10 @@ def __load_module(module_name: str, module_file: Path) -> ModuleType:
     # Only allow .py files
     if module_file.suffix != ".py":
         raise SecurityError(f"Module file must be a .py file, got: {module_file.suffix}")
-    module_spec = importlib.util.spec_from_file_location(module_name, module_file)
+    module_spec = spec_from_file_location(module_name, module_file)
     if module_spec is None or module_spec.loader is None:
         raise ImportError(f"Cannot load module {module_name} from {module_file}")
-    module = importlib.util.module_from_spec(module_spec)
+    module = module_from_spec(module_spec)
     module_spec.loader.exec_module(module)
     return module
 
@@ -92,9 +92,9 @@ def import_from_address(
         module_name = module_name or module_file.stem
         module = __load_module(module_name, module_file)
     elif module_name is not None:
-        module = importlib.import_module(module_name)
+        module = import_module(module_name)
     elif default_module is None:
-        module, module_name = importlib.import_module("builtins"), "builtins"
+        module, module_name = import_module("builtins"), "builtins"
     else:
         module, module_name = default_module, default_module.__name__
     validate_import(module_name, target)
