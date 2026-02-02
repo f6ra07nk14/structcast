@@ -60,7 +60,7 @@ class __SecuritySettings:
     working_dir_check: bool = DEFAULT_WORKING_DIR_CHECK
 
 
-__settings = __SecuritySettings()
+SECURITY_SETTINGS = __SecuritySettings()
 """Global security settings instance."""
 
 
@@ -68,11 +68,6 @@ def configure_security(
     blocked_modules: Optional[set[str]] = None,
     allowed_modules: Optional[dict[str, Optional[set[Optional[str]]]]] = None,
     dangerous_dunders: Optional[set[str]] = None,
-    ascii_check: Optional[bool] = None,
-    protected_member_check: Optional[bool] = None,
-    private_member_check: Optional[bool] = None,
-    hidden_check: Optional[bool] = None,
-    working_dir_check: Optional[bool] = None,
 ) -> None:
     """Configure security settings for import_from_address.
 
@@ -91,21 +86,13 @@ def configure_security(
         working_dir_check (Optional[bool]): Whether to ensure relative paths resolve within allowed directories.
             If None, use default.
     """
-    __settings.blocked_modules.clear()
-    __settings.blocked_modules.update(DEFAULT_BLOCKED_MODULES if blocked_modules is None else blocked_modules)
-    __settings.allowed_modules.clear()
-    __settings.allowed_modules.update(DEFAULT_ALLOWED_MODULES if allowed_modules is None else allowed_modules)
-    __settings.dangerous_dunders.clear()
-    __settings.dangerous_dunders.update(DEFAULT_DANGEROUS_DUNDERS if dangerous_dunders is None else dangerous_dunders)
-    __settings.ascii_check = DEFAULT_ASCII_CHECK if ascii_check is None else ascii_check
-    __settings.protected_member_check = (
-        DEFAULT_PROTECTED_MEMBER_CHECK if protected_member_check is None else protected_member_check
-    )
-    __settings.private_member_check = (
-        DEFAULT_PRIVATE_MEMBER_CHECK if private_member_check is None else private_member_check
-    )
-    __settings.hidden_check = DEFAULT_HIDDEN_CHECK if hidden_check is None else hidden_check
-    __settings.working_dir_check = DEFAULT_WORKING_DIR_CHECK if working_dir_check is None else working_dir_check
+    SECURITY_SETTINGS.blocked_modules.clear()
+    SECURITY_SETTINGS.blocked_modules.update(DEFAULT_BLOCKED_MODULES if blocked_modules is None else blocked_modules)
+    SECURITY_SETTINGS.allowed_modules.clear()
+    SECURITY_SETTINGS.allowed_modules.update(DEFAULT_ALLOWED_MODULES if allowed_modules is None else allowed_modules)
+    SECURITY_SETTINGS.dangerous_dunders.clear()
+    dangerous_dunders = DEFAULT_DANGEROUS_DUNDERS if dangerous_dunders is None else dangerous_dunders
+    SECURITY_SETTINGS.dangerous_dunders.update(dangerous_dunders)
 
 
 def register_dir(path: PathLike) -> None:
@@ -119,10 +106,10 @@ def register_dir(path: PathLike) -> None:
     resolved_path = resolve_path(path)
     if resolved_path is None or not resolved_path.is_dir():
         raise ValueError(f"Path is not a valid directory: {path}")
-    if resolved_path in __settings.allowed_directories:
+    if resolved_path in SECURITY_SETTINGS.allowed_directories:
         logger.warning(f"Directory is already registered. Skip registering: {path}")
     else:
-        __settings.allowed_directories.append(resolved_path)
+        SECURITY_SETTINGS.allowed_directories.append(resolved_path)
 
 
 def unregister_dir(path: PathLike) -> None:
@@ -137,7 +124,7 @@ def unregister_dir(path: PathLike) -> None:
     if resolved_path is None or not resolved_path.is_dir():
         raise ValueError(f"Path is not a valid directory: {path}")
     try:
-        __settings.allowed_directories.remove(resolved_path)
+        SECURITY_SETTINGS.allowed_directories.remove(resolved_path)
     except ValueError:
         logger.warning(f"Directory was not registered. Skip unregistering: {path}")
 
@@ -152,12 +139,12 @@ def validate_import(module_name: str, target: str) -> None:
     Raises:
         SecurityError: If the import is blocked by security settings.
     """
-    allowed_set = __settings.allowed_modules.get(module_name, None)
+    allowed_set = SECURITY_SETTINGS.allowed_modules.get(module_name, None)
     if allowed_set is None:
         raise SecurityError(f"Blocked import attempt (not in allowlist): {module_name}.{target}")
     if None not in allowed_set and target not in allowed_set:
         raise SecurityError(f"Blocked import attempt (not in allowlist): {module_name}.{target}")
-    if any(n and (module_name == n or module_name.startswith(f"{n}.")) for n in __settings.blocked_modules):
+    if any(n and (module_name == n or module_name.startswith(f"{n}.")) for n in SECURITY_SETTINGS.blocked_modules):
         raise SecurityError(f"Blocked import attempt (blocklisted): {module_name}.{target}")
 
 
@@ -168,16 +155,18 @@ def _validate_attribute(
     private_member_check: Optional[bool] = None,
     ascii_check: Optional[bool] = None,
 ) -> None:
-    ascii_check = __settings.ascii_check if ascii_check is None else ascii_check
+    ascii_check = SECURITY_SETTINGS.ascii_check if ascii_check is None else ascii_check
     protected_member_check = (
-        __settings.protected_member_check if protected_member_check is None else protected_member_check
+        SECURITY_SETTINGS.protected_member_check if protected_member_check is None else protected_member_check
     )
-    private_member_check = __settings.private_member_check if private_member_check is None else private_member_check
+    private_member_check = (
+        SECURITY_SETTINGS.private_member_check if private_member_check is None else private_member_check
+    )
     if not target.isidentifier() or target != target.strip():
         raise SecurityError(f"Invalid attribute access attempt: {repr(target)}")
     if ascii_check and not target.isascii():
         raise SecurityError(f"Non-ASCII attribute access attempt: {repr(target)}")
-    if target in __settings.dangerous_dunders:
+    if target in SECURITY_SETTINGS.dangerous_dunders:
         raise SecurityError(f"Dangerous dunder access attempt: {repr(target)}")
     is_private = target.startswith("__")
     is_protected = target.startswith("_") and not is_private
@@ -243,20 +232,20 @@ def check_path(
         FileNotFoundError: If the path does not exist.
         SecurityError: If the path is blocked by security settings.
     """
-    hidden_check = __settings.hidden_check if hidden_check is None else hidden_check
-    working_dir_check = __settings.working_dir_check if working_dir_check is None else working_dir_check
+    hidden_check = SECURITY_SETTINGS.hidden_check if hidden_check is None else hidden_check
+    working_dir_check = SECURITY_SETTINGS.working_dir_check if working_dir_check is None else working_dir_check
     if not isinstance(path, Path):
         path = Path(path)
     candidate: Optional[Path] = resolve_path(path)
     if not path.is_absolute():
-        allowed_directories = __settings.allowed_directories.copy()
+        allowed_directories = SECURITY_SETTINGS.allowed_directories.copy()
         while candidate is None and allowed_directories:
             candidate = resolve_path(allowed_directories.pop(0) / path)
     if candidate is None:
         raise FileNotFoundError(f"Path does not exist: {path}")
     if working_dir_check and not (
         (candidate.is_relative_to(Path.home()) and candidate.is_relative_to(Path.cwd()))
-        or any(candidate.is_relative_to(d) for d in __settings.allowed_directories)
+        or any(candidate.is_relative_to(d) for d in SECURITY_SETTINGS.allowed_directories)
     ):
         raise SecurityError(f"Path is outside of allowed directories: {path}")
     if hidden_check and any(p.startswith(".") for p in candidate.parts):
