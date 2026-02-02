@@ -1,4 +1,4 @@
-"""Core instantiation logic for StructCast."""
+"""Core instantiator logic for StructCast."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
