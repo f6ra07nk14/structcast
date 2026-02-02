@@ -1,15 +1,71 @@
 """Base utility functions for StructCast."""
 
+from collections.abc import Sequence
 from importlib import import_module
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Optional
+from typing import Any, Optional, TypeVar, Union, cast, overload
 
 from ruamel.yaml import YAML
 
 from structcast.utils.security import SecurityError, check_path, validate_attribute, validate_import
 from structcast.utils.types import PathLike
+
+T = TypeVar("T")
+
+
+@overload
+def check_elements(elements: Optional[Union[Sequence[str], str]]) -> list[str]: ...
+
+
+@overload
+def check_elements(elements: Optional[set[T]]) -> list[T]: ...
+
+
+@overload
+def check_elements(elements: Optional[list[T]]) -> list[T]: ...
+
+
+@overload
+def check_elements(elements: Optional[tuple[T, ...]]) -> list[T]: ...
+
+
+@overload
+def check_elements(elements: Optional[Union[Sequence[T], T]]) -> list[T]: ...
+
+
+def check_elements(elements: Optional[Union[Sequence[T], set[T], T]]) -> list[T]:
+    """Check the elements.
+
+    Ensure that the elements are in the list format.
+
+    Examples:
+
+    .. code-block:: python
+
+    >>> check_elements(None)
+    []
+    >>> check_elements("abc")
+    ['abc']
+    >>> check_elements(("abc", "def"))
+    ['abc', 'def']
+    >>> check_elements(["abc", "def"])
+    ['abc', 'def']
+
+    Args:
+        elements (Optional[Union[Elements[T], T]]): The elements to check.
+
+    Returns:
+        The checked elements.
+    """
+    if elements is None:
+        return []
+    if isinstance(elements, (tuple, set)):
+        return list(elements)
+    if isinstance(elements, list):
+        return elements
+    return [cast(T, elements)]
 
 
 def __load_module(module_name: str, module_file: Path) -> ModuleType:
