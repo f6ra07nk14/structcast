@@ -139,27 +139,13 @@ def validate_import(module_name: str, target: str) -> None:
         raise SecurityError(f"Blocked import attempt (blocklisted): {module_name}.{target}")
 
 
-def validate_attribute(
+def _validate_attribute(
     target: str,
     *,
     protected_member_check: Optional[bool] = None,
     private_member_check: Optional[bool] = None,
     ascii_check: Optional[bool] = None,
 ) -> None:
-    """Validate that an attribute access is safe.
-
-    Args:
-        target (str): The attribute name to access.
-        protected_member_check (Optional[bool]): Whether to block access to protected members (starting with '_').
-            Default is taken from global settings.
-        private_member_check (Optional[bool]): Whether to block access to private members (starting with '__').
-            Default is taken from global settings.
-        ascii_check (Optional[bool]): Whether to block access to non-ASCII attribute names.
-            Default is taken from global settings.
-
-    Raises:
-        SecurityError: If the attribute access is blocked by security settings.
-    """
     ascii_check = __settings.ascii_check if ascii_check is None else ascii_check
     protected_member_check = (
         __settings.protected_member_check if protected_member_check is None else protected_member_check
@@ -177,6 +163,40 @@ def validate_attribute(
         raise SecurityError(f"Private member access attempt: {repr(target)}")
     elif protected_member_check and is_protected:
         raise SecurityError(f"Protected member access attempt: {repr(target)}")
+
+
+def validate_attribute(
+    target: str,
+    *,
+    protected_member_check: Optional[bool] = None,
+    private_member_check: Optional[bool] = None,
+    ascii_check: Optional[bool] = None,
+) -> None:
+    """Validate that a dotted attribute access is safe.
+
+    Args:
+        target (str): The dotted attribute name to access.
+        protected_member_check (Optional[bool]): Whether to block access to protected members (starting with '_').
+            Default is taken from global settings.
+        private_member_check (Optional[bool]): Whether to block access to private members (starting with '__').
+            Default is taken from global settings.
+        ascii_check (Optional[bool]): Whether to block access to non-ASCII attribute names.
+            Default is taken from global settings.
+
+    Raises:
+        SecurityError: If the attribute access is blocked by security settings.
+    """
+    attrs = target.split(".")
+    for ind, attr in enumerate(attrs):
+        try:
+            _validate_attribute(
+                attr,
+                protected_member_check=protected_member_check,
+                private_member_check=private_member_check,
+                ascii_check=ascii_check,
+            )
+        except SecurityError as e:
+            raise SecurityError(f'Invalid attribute access attempt at "{".".join(attrs[: ind + 1])}": {e}') from e
 
 
 def check_path(
