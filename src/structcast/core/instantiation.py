@@ -28,6 +28,10 @@ from structcast.utils.dataclasses import dataclass
 logger = logging.getLogger(__name__)
 
 
+class InstantiationError(Exception):
+    """Exception raised for errors during instantiation."""
+
+
 @dataclass(frozen=True)
 class PatternResult:
     """Result of pattern matching."""
@@ -43,10 +47,6 @@ class PatternResult:
 
     start_time: float = field(default_factory=time.time)
     """Start time of instantiation for timeout checks."""
-
-
-class InstantiationError(Exception):
-    """Exception raised for errors during instantiation."""
 
 
 class BasePattern(BaseModel, abc.ABC):
@@ -80,8 +80,7 @@ def _validate_pattern_result(
     if res.depth >= MAX_INSTANTIATION_DEPTH:
         raise InstantiationError(f"Maximum instantiation depth exceeded: {MAX_INSTANTIATION_DEPTH}")
     # Security check: enforce timeout
-    elapsed = time.time() - res.start_time
-    if elapsed > MAX_INSTANTIATION_TIME:
+    if (time.time() - res.start_time) > MAX_INSTANTIATION_TIME:
         raise InstantiationError(f"Maximum instantiation time exceeded: {MAX_INSTANTIATION_TIME} seconds")
     return type(res), res.patterns, res.runs, res.depth, res.start_time
 
@@ -229,8 +228,7 @@ def instantiate(cfg: Any, *, __depth__: int = 0, __start_time__: Optional[float]
     if __depth__ >= MAX_INSTANTIATION_DEPTH:
         raise InstantiationError(f"Maximum instantiation depth exceeded: {MAX_INSTANTIATION_DEPTH}")
     # Security check: timeout
-    elapsed = time.time() - __start_time__
-    if elapsed > MAX_INSTANTIATION_TIME:
+    if (time.time() - __start_time__) > MAX_INSTANTIATION_TIME:
         raise InstantiationError(f"Maximum instantiation time exceeded: {MAX_INSTANTIATION_TIME} seconds")
     # Security check: primitive types that are safe to return as-is
     if isinstance(cfg, (int, float, bool, bytes, Path, type(None))):
