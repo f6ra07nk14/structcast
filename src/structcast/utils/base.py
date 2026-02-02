@@ -9,53 +9,10 @@ from typing import Any, Optional
 
 from ruamel.yaml import YAML
 
-from structcast.utils.security import SECURITY_SETTINGS, SecurityError, resolve_path
+from structcast.utils.security import SecurityError, check_path, validate_attribute, validate_import
 
 
-def check_path(
-    path: PathLike,
-    *,
-    hidden_check: Optional[bool] = None,
-    working_dir_check: Optional[bool] = None,
-) -> Path:
-    """Check if a path exists, searching in registered directories if necessary.
-
-    Args:
-        path (PathLike): The path to check.
-        hidden_check (Optional[bool]): Whether to block paths with hidden directories (starting with '.').
-            Default is taken from global settings.
-        working_dir_check (Optional[bool]): Whether to ensure that relative paths resolve within allowed directories.
-            Default is taken from global settings.
-
-    Returns:
-        Path: The resolved path.
-
-    Raises:
-        FileNotFoundError: If the path does not exist.
-        SecurityError: If the path is blocked by security settings.
-    """
-    hidden_check = SECURITY_SETTINGS.hidden_check if hidden_check is None else hidden_check
-    working_dir_check = SECURITY_SETTINGS.working_dir_check if working_dir_check is None else working_dir_check
-    if not isinstance(path, Path):
-        path = Path(path)
-    candidate: Optional[Path] = resolve_path(path)
-    if not path.is_absolute():
-        allowed_directories = list(SECURITY_SETTINGS.allowed_directories)
-        while candidate is None and allowed_directories:
-            candidate = resolve_path(allowed_directories.pop(0) / path)
-    if candidate is None:
-        raise FileNotFoundError(f"Path does not exist: {path}")
-    if working_dir_check and not (
-        (candidate.is_relative_to(Path.home()) and candidate.is_relative_to(Path.cwd()))
-        or any(candidate.is_relative_to(d) for d in SECURITY_SETTINGS.allowed_directories)
-    ):
-        raise SecurityError(f"Path is outside of allowed directories: {path}")
-    if hidden_check and any(p.startswith(".") for p in candidate.parts):
-        raise SecurityError(f"Path contains hidden directories which are not allowed: {path}")
-    return candidate
-
-
-def _load_module(module_name: str, module_file: Path) -> ModuleType:
+def __load_module(module_name: str, module_file: Path) -> ModuleType:
     """Load a module from a file.
 
     Args:
@@ -78,70 +35,6 @@ def _load_module(module_name: str, module_file: Path) -> ModuleType:
     module = importlib.util.module_from_spec(module_spec)
     module_spec.loader.exec_module(module)
     return module
-
-
-def validate_import(module_name: str, target: str) -> None:
-    """Validate that an import is safe.
-
-    Args:
-        module_name (str): The module name to import from.
-        target (str): The target name to import.
-
-    Raises:
-        SecurityError: If the import is blocked by security settings.
-    """
-    if module_name == "builtins":
-        if target not in SECURITY_SETTINGS.allowed_builtins:
-            raise SecurityError(f"Blocked builtin import attempt: {target}")
-    elif None not in SECURITY_SETTINGS.allowed_modules:
-        if not any(
-            n and (module_name == n or module_name.startswith(f"{n}.")) for n in SECURITY_SETTINGS.allowed_modules
-        ):
-            raise SecurityError(f"Blocked import attempt (not in allowlist): {module_name}.{target}")
-    if any(n and (module_name == n or module_name.startswith(f"{n}.")) for n in SECURITY_SETTINGS.blocked_modules):
-        raise SecurityError(f"Blocked import attempt (blocklisted): {module_name}.{target}")
-
-
-def validate_attribute(
-    target: str,
-    *,
-    protected_member_check: Optional[bool] = None,
-    private_member_check: Optional[bool] = None,
-    ascii_check: Optional[bool] = None,
-) -> None:
-    """Validate that an attribute access is safe.
-
-    Args:
-        target (str): The attribute name to access.
-        protected_member_check (Optional[bool]): Whether to block access to protected members (starting with '_').
-            Default is taken from global settings.
-        private_member_check (Optional[bool]): Whether to block access to private members (starting with '__').
-            Default is taken from global settings.
-        ascii_check (Optional[bool]): Whether to block access to non-ASCII attribute names.
-            Default is taken from global settings.
-
-    Raises:
-        SecurityError: If the attribute access is blocked by security settings.
-    """
-    ascii_check = SECURITY_SETTINGS.ascii_check if ascii_check is None else ascii_check
-    protected_member_check = (
-        SECURITY_SETTINGS.protected_member_check if protected_member_check is None else protected_member_check
-    )
-    private_member_check = (
-        SECURITY_SETTINGS.private_member_check if private_member_check is None else private_member_check
-    )
-    if not target.isidentifier() or target != target.strip():
-        raise SecurityError(f"Invalid attribute access attempt: {repr(target)}")
-    if ascii_check and not target.isascii():
-        raise SecurityError(f"Non-ASCII attribute access attempt: {repr(target)}")
-    if target in SECURITY_SETTINGS.dangerous_dunders:
-        raise SecurityError(f"Dangerous dunder access attempt: {repr(target)}")
-    is_private = target.startswith("__")
-    is_protected = target.startswith("_") and not is_private
-    if private_member_check and is_private:
-        raise SecurityError(f"Private member access attempt: {repr(target)}")
-    elif protected_member_check and is_protected:
-        raise SecurityError(f"Protected member access attempt: {repr(target)}")
 
 
 def import_from_address(
@@ -197,7 +90,7 @@ def import_from_address(
     if module_file is not None:
         module_file = check_path(module_file, hidden_check=hidden_check, working_dir_check=working_dir_check)
         module_name = module_name or module_file.stem
-        module = _load_module(module_name, module_file)
+        module = __load_module(module_name, module_file)
     elif module_name is not None:
         module = importlib.import_module(module_name)
     elif default_module is None:
