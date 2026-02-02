@@ -80,6 +80,7 @@ force-sort-within-sections = true
 [tool.ruff.lint.pylint]
 max-args = 20
 max-returns = 10
+max-branches = 15
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
