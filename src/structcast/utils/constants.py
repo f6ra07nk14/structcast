@@ -3,15 +3,8 @@
 from typing import Optional
 
 DEFAULT_DANGEROUS_DUNDERS: set[str] = {
-    "__subclasses__",
-    "__bases__",
-    "__globals__",
-    "__code__",
-    "__dict__",
-    "__class__",
-    "__mro__",
-    "__init__",
-    "__import__",
+    *{"__subclasses__", "__bases__", "__globals__", "__code__", "__dict__"},
+    *{"__class__", "__mro__", "__init__", "__import__"},
 }
 """Default dangerous dunder attributes to block during instantiation."""
 
@@ -181,6 +174,6 @@ DEFAULT_ALLOWED_MODULES: dict[str, Optional[set[Optional[str]]]] = {
         *{"IPv4Address", "IPv4Interface", "IPv4Network", "IPv6Address", "IPv6Interface", "IPv6Network"},
     },
     # --- Project Self-Ref ---
-    "structcast": {None},  # Allow all attributes from structcast module
+    "structcast.utils": {None},  # Allow all attributes from structcast.utils module
 }
 """Default allowed modules and their allowed attributes for StructCast instantiation."""
