@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
-from structcast.utils.base import check_path, import_from_address, load_yaml
-from structcast.utils.security import SecurityError, register_dir, unregister_dir
+from structcast.utils.base import import_from_address, load_yaml
+from structcast.utils.security import SecurityError, check_path, register_dir, unregister_dir
 from tests.utils import configure_security_context, temporary_registered_dir
 
 
@@ -130,7 +130,7 @@ class TestImportFromAddress:
 
     def test_import_nonexistent_target(self) -> None:
         """Test importing non-existent target raises ImportError."""
-        with configure_security_context(allowed_builtins={"nonexistent_function_xyz"}):
+        with configure_security_context(allowed_modules={"builtins": {None}}):
             with pytest.raises(ImportError, match="not found"):
                 import_from_address("nonexistent_function_xyz")
 

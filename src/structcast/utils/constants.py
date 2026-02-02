@@ -2,31 +2,18 @@
 
 from typing import Optional
 
-DEFAULT_ALLOWED_MODULES: set[Optional[str]] = {
-    # --- Core Data Structures ---
-    "collections",
-    "datetime",
-    "uuid",
-    "decimal",
-    "enum",
-    # --- Logic & Math ---
-    "math",
-    "itertools",
-    "functools",
-    "random",
-    "secrets",
-    # --- Text & Encoding ---
-    "string",
-    "base64",
-    "json",
-    "html",
-    # --- Parsing (Network safe) ---
-    "urllib.parse",
-    "ipaddress",
-    # --- Project Self-Ref ---
-    "structcast",
+DEFAULT_DANGEROUS_DUNDERS: set[str] = {
+    "__subclasses__",
+    "__bases__",
+    "__globals__",
+    "__code__",
+    "__dict__",
+    "__class__",
+    "__mro__",
+    "__init__",
+    "__import__",
 }
-"""Default allowed modules for StructCast instantiation."""
+"""Default dangerous dunder attributes to block during instantiation."""
 
 DEFAULT_BLOCKED_MODULES: set[str] = {
     # --- System & Process Management ---
@@ -90,69 +77,110 @@ DEFAULT_BLOCKED_MODULES: set[str] = {
 }
 """Default blocked modules for StructCast instantiation."""
 
-DEFAULT_ALLOWED_BUILTINS: set[str] = {
-    # --- Data Types (Constructors) ---
-    "bool",
-    "int",
-    "float",
-    "complex",
-    "str",
-    "bytes",
-    "bytearray",
-    "list",
-    "tuple",
-    "set",
-    "frozenset",
-    "dict",
-    # --- Inspection / Helpers (Safe) ---
-    "len",  # Get length
-    "abs",  # Absolute value
-    "min",
-    "max",  # Min/Max value
-    "sum",  # Summation
-    "all",
-    "any",  # Boolean logic
-    "divmod",  # Division
-    "round",  # Rounding
-    "hash",  # Hashing (safe for immutable types)
-    "id",  # Object ID (mostly harmless, though sometimes leaks info)
-    "enumerate",  # Loop helper
-    "zip",  # Loop helper
-    "range",  # Loop helper
-    "reversed",  # Loop helper
-    "sorted",  # Sorting
-    "filter",  # Functional helper
-    "map",  # Functional helper
-    "pow",  # Power function
-    "slice",  # Slice object
-    # --- Formatting ---
-    "format",  # String formatting
-    "chr",  # Int to Char
-    "ord",  # Char to Int
-    "bin",
-    "oct",
-    "hex",  # Number formatting
-    "ascii",  # ASCII representation
-    "repr",  # String representation (Usually safe, but watch out for massive outputs)
-    # --- Errors ---
-    # Allowing Exception types is usually fine for raising errors
-    "Exception",
-    "ValueError",
-    "TypeError",
-    "KeyError",
-    "IndexError",
-}
-"""Default allowed builtins for StructCast instantiation."""
 
-DEFAULT_DANGEROUS_DUNDERS: set[str] = {
-    "__subclasses__",
-    "__bases__",
-    "__globals__",
-    "__code__",
-    "__dict__",
-    "__class__",
-    "__mro__",
-    "__init__",
-    "__import__",
+DEFAULT_ALLOWED_MODULES: dict[str, Optional[set[Optional[str]]]] = {
+    # --- Core Data Structures ---
+    "builtins": {
+        # --- Data Types (Constructors) ---
+        *{"bool", "int", "float", "complex", "str", "bytes", "bytearray", "list", "tuple", "set", "frozenset", "dict"},
+        # --- Inspection / Helpers (Safe) ---
+        *{"len", "abs", "min", "max", "sum", "all", "any", "zip", "map", "pow", "hash", "id"},
+        *{"divmod", "round", "enumerate", "range", "reversed", "sorted", "filter", "slice"},
+        # --- Formatting ---
+        *{"format", "chr", "ord", "bin", "oct", "hex", "ascii", "repr"},
+        # --- Errors ---
+        *{"Exception", "ValueError", "TypeError", "KeyError", "IndexError"},
+    },
+    "collections": {
+        *{"ChainMap", "Counter", "OrderedDict", "UserDict", "UserList"},
+        *{"UserString", "defaultdict", "deque", "namedtuple"},
+    },
+    "datetime": {"date", "datetime", "time", "timedelta", "timezone", "tzinfo", "MINYEAR", "MAXYEAR"},
+    "time": {
+        *{"altzone", "daylight", "timezone", "tzname", "CLOCK_BOOTTIME", "CLOCK_PROF", "CLOCK_UPTIME"},
+        *{"CLOCK_MONOTONIC", "CLOCK_MONOTONIC_RAW", "CLOCK_PROCESS_CPUTIME_ID", "CLOCK_REALTIME"},
+        *{"CLOCK_THREAD_CPUTIME_ID", "CLOCK_HIGHRES", "CLOCK_UPTIME_RAW", "CLOCK_UPTIME_RAW_APPROX"},
+        *{"CLOCK_MONOTONIC_RAW_APPROX", "CLOCK_TAI", "struct_time", "asctime", "ctime", "gmtime", "localtime"},
+        *{"mktime", "strftime", "time", "tzset", "get_clock_info", "monotonic", "perf_counter", "process_time"},
+        *{"clock_getres", "clock_gettime", "clock_gettime_ns", "pthread_getcpuclockid", "monotonic_ns"},
+        *{"perf_counter_ns", "process_time_ns", "time_ns", "thread_time", "thread_time_ns"},
+    },
+    "uuid": {
+        *{"RESERVED_NCS", "RFC_4122", "RESERVED_MICROSOFT", "RESERVED_FUTURE"},
+        *{"SafeUUID", "UUID", "uuid4", "uuid1", "uuid3", "uuid5"},
+        *{"NAMESPACE_DNS", "NAMESPACE_URL", "NAMESPACE_OID", "NAMESPACE_X500"},
+    },
+    "decimal": {
+        *{"Clamped", "Context", "ConversionSyntax", "Decimal", "DecimalException", "DecimalTuple"},
+        *{"DivisionByZero", "DivisionImpossible", "DivisionUndefined", "FloatOperation", "Inexact"},
+        *{"InvalidContext", "InvalidOperation", "Overflow", "Rounded", "Subnormal", "Underflow"},
+        *{"ROUND_DOWN", "ROUND_HALF_UP", "ROUND_HALF_EVEN", "ROUND_CEILING", "ROUND_FLOOR", "ROUND_UP"},
+        *{"ROUND_HALF_DOWN", "ROUND_05UP"},
+        *{"HAVE_CONTEXTVAR", "HAVE_THREADS", "MAX_EMAX", "MAX_PREC", "MIN_EMIN", "MIN_ETINY"},
+        *{"setcontext", "getcontext", "localcontext", "DefaultContext", "BasicContext", "ExtendedContext"},
+    },
+    "enum": {"EnumMeta", "Enum", "IntEnum", "Flag", "IntFlag", "auto", "unique"},
+    # --- Logic & Math ---
+    "math": {
+        *{"e", "pi", "inf", "nan", "tau"},
+        *{"acos", "acosh", "asin", "asinh", "atan", "atan2", "atanh", "cbrt", "ceil", "comb", "copysign"},
+        *{"cos", "cosh", "degrees", "dist", "erf", "erfc", "exp", "exp2", "expm1", "fabs", "factorial", "floor"},
+        *{"fmod", "frexp", "fsum", "gamma", "gcd", "hypot", "isclose", "isfinite", "isinf", "isnan", "isqrt"},
+        *{"lcm", "ldexp", "lgamma", "log", "log10", "log1p", "log2", "modf", "nextafter", "perm", "pow", "prod"},
+        *{"radians", "remainder", "sin", "sinh", "sqrt", "tan", "tanh", "trunc", "ulp", "fma"},
+    },
+    "itertools": {
+        *{"count", "cycle", "repeat", "accumulate", "chain", "compress", "dropwhile", "filterfalse"},
+        *{"groupby", "islice", "starmap", "takewhile", "tee", "zip_longest", "product", "permutations", "combinations"},
+        *{"combinations_with_replacement", "pairwise", "batched"},
+    },
+    "functools": {
+        *{"update_wrapper", "wraps", "WRAPPER_ASSIGNMENTS", "WRAPPER_UPDATES", "total_ordering", "cache"},
+        *{"cmp_to_key", "lru_cache", "reduce", "partial", "partialmethod", "singledispatch"},
+        *{"singledispatchmethod", "cached_property"},
+    },
+    "random": {
+        *{"Random", "SystemRandom", "betavariate", "choice", "choices", "expovariate", "gammavariate", "gauss"},
+        *{"getrandbits", "getstate", "lognormvariate", "normalvariate", "paretovariate", "randbytes", "randint"},
+        *{"random", "randrange", "sample", "seed", "setstate", "shuffle", "triangular", "uniform"},
+        *{"vonmisesvariate", "weibullvariate"},
+    },
+    "secrets": {
+        *{"choice", "randbelow", "randbits", "SystemRandom", "token_bytes", "token_hex"},
+        *{"token_urlsafe", "compare_digest"},
+    },
+    "operator": {
+        *{"abs", "add", "and_", "concat", "contains", "countOf", "eq", "floordiv", "ge", "getitem", "gt", "iadd"},
+        *{"iand", "iconcat", "ifloordiv", "ilshift", "imatmul", "imod", "imul", "index", "indexOf", "inv", "invert"},
+        *{"ior", "ipow", "irshift", "is_", "is_not", "isub", "itemgetter", "itruediv", "ixor", "le", "length_hint"},
+        *{"lshift", "lt", "matmul", "methodcaller", "mod", "mul", "ne", "neg", "not_", "or_", "pos", "pow", "rshift"},
+        *{"sub", "truediv", "truth", "xor"},
+    },
+    # --- Text & Encoding ---
+    "string": {
+        *{"ascii_letters", "ascii_lowercase", "ascii_uppercase", "capwords", "digits", "hexdigits"},
+        *{"octdigits", "printable", "punctuation", "whitespace", "Formatter", "Template"},
+    },
+    "base64": {
+        *{"encode", "decode", "encodebytes", "decodebytes", "b64encode", "b64decode", "b32encode", "b32decode"},
+        *{"b16encode", "b16decode", "b85encode", "b85decode", "a85encode", "a85decode"},
+        *{"standard_b64encode", "standard_b64decode", "urlsafe_b64encode", "urlsafe_b64decode"},
+    },
+    "json": {"dump", "dumps", "load", "loads", "JSONDecoder", "JSONDecodeError", "JSONEncoder"},
+    "html": {"escape", "unescape"},
+    # --- Parsing (Network safe) ---
+    "urllib.parse": {
+        *{"urlparse", "urlunparse", "urljoin", "urldefrag", "urlsplit", "urlunsplit", "urlencode", "parse_qs"},
+        *{"parse_qsl", "quote", "quote_plus", "quote_from_bytes", "unquote", "unquote_plus", "unquote_to_bytes"},
+        *{"DefragResult", "ParseResult", "SplitResult", "DefragResultBytes", "ParseResultBytes", "SplitResultBytes"},
+    },
+    "ipaddress": {
+        *{"IPV4LENGTH", "IPV6LENGTH", "AddressValueError", "NetmaskValueError"},
+        *{"ip_address", "ip_network", "ip_interface", "v4_int_to_packed", "v6_int_to_packed"},
+        *{"summarize_address_range", "collapse_addresses", "get_mixed_type_key"},
+        *{"IPv4Address", "IPv4Interface", "IPv4Network", "IPv6Address", "IPv6Interface", "IPv6Network"},
+    },
+    # --- Project Self-Ref ---
+    "structcast": {None},  # Allow all attributes from structcast module
 }
-"""Default dangerous dunder attributes to block during instantiation."""
+"""Default allowed modules and their allowed attributes for StructCast instantiation."""

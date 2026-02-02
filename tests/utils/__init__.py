@@ -11,16 +11,11 @@ from structcast.utils.security import configure_security, register_dir, unregist
 @contextmanager
 def configure_security_context(
     blocked_modules: Optional[set[str]] = None,
-    allowed_builtins: Optional[set[str]] = None,
     allowed_modules: Optional[set[Optional[str]]] = None,
 ) -> Generator[None, None, None]:
     """Context manager to temporarily configure security settings."""
     try:
-        configure_security(
-            allowed_modules=allowed_modules,
-            blocked_modules=blocked_modules,
-            allowed_builtins=allowed_builtins,
-        )
+        configure_security(allowed_modules=allowed_modules, blocked_modules=blocked_modules)
         yield
     finally:
         configure_security()

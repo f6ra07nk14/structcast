@@ -17,13 +17,13 @@ class TestSecurityBlocking:
 
     def test_block_os_module(self) -> None:
         """Test that os module is blocked."""
-        with configure_security_context(allowed_modules={None}):
+        with configure_security_context(allowed_modules={}):
             with pytest.raises(SecurityError, match="os.system"):
                 import_from_address("os.system")
 
     def test_block_subprocess_module(self) -> None:
         """Test that subprocess module is blocked."""
-        with configure_security_context(allowed_modules={None}):
+        with configure_security_context(allowed_modules={}):
             with pytest.raises(SecurityError, match="subprocess.run"):
                 import_from_address("subprocess.run")
 
@@ -69,19 +69,19 @@ class TestSecurityConfiguration:
 
     def test_custom_blocked_modules(self) -> None:
         """Test custom blocked modules."""
-        with configure_security_context(allowed_modules={None}, blocked_modules={"json"}):
+        with configure_security_context(allowed_modules={}, blocked_modules={"json"}):
             with pytest.raises(SecurityError, match="json.loads"):
                 import_from_address("json.loads")
 
     def test_custom_blocked_builtins(self) -> None:
         """Test custom blocked builtins."""
-        with configure_security_context(allowed_builtins=set()):
+        with configure_security_context(allowed_modules={"builtins": None}):
             with pytest.raises(SecurityError, match="int"):
                 import_from_address("int")
 
     def test_allowlist_mode(self) -> None:
         """Test allowlist mode."""
-        with configure_security_context(allowed_modules={"math", "builtins"}):
+        with configure_security_context(allowed_modules={"math": {None}}):
             assert import_from_address("math.sqrt") is math.sqrt
 
             with pytest.raises(SecurityError, match="json.loads"):
@@ -98,7 +98,7 @@ class TestSecurityEdgeCases:
 
     def test_error_message_includes_blocked_module(self) -> None:
         """Test that error message is informative."""
-        with configure_security_context(allowed_modules={None}):
+        with configure_security_context(allowed_modules={}):
             with pytest.raises(SecurityError) as exc_info:
                 import_from_address("subprocess.Popen")
         assert "subprocess" in str(exc_info.value)
@@ -138,7 +138,7 @@ class TestFileLoadingSecurity:
         py_file = tmp_path / "test_module.py"
         py_file.write_text("value = 42")
         # Should work with absolute path when module is allowed
-        with configure_security_context(allowed_modules={"test_module"}):
+        with configure_security_context(allowed_modules={"test_module": {None}}):
             assert import_from_address("value", module_file=py_file, working_dir_check=False) == 42
 
 

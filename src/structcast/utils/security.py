@@ -5,12 +5,7 @@ from logging import getLogger
 from pathlib import Path
 from typing import Optional
 
-from structcast.utils.constants import (
-    DEFAULT_ALLOWED_BUILTINS,
-    DEFAULT_ALLOWED_MODULES,
-    DEFAULT_BLOCKED_MODULES,
-    DEFAULT_DANGEROUS_DUNDERS,
-)
+from structcast.utils.constants import DEFAULT_ALLOWED_MODULES, DEFAULT_BLOCKED_MODULES, DEFAULT_DANGEROUS_DUNDERS
 from structcast.utils.dataclasses import dataclass
 from structcast.utils.types import PathLike
 
@@ -45,8 +40,9 @@ class SecuritySettings:
 
     allowed_directories: list[Path] = field(default_factory=list)
     blocked_modules: set[str] = field(default_factory=lambda: DEFAULT_BLOCKED_MODULES.copy())
-    allowed_builtins: set[str] = field(default_factory=lambda: DEFAULT_ALLOWED_BUILTINS.copy())
-    allowed_modules: set[Optional[str]] = field(default_factory=lambda: DEFAULT_ALLOWED_MODULES.copy())
+    allowed_modules: dict[str, Optional[set[Optional[str]]]] = field(
+        default_factory=lambda: DEFAULT_ALLOWED_MODULES.copy()
+    )
     dangerous_dunders: set[str] = field(default_factory=lambda: DEFAULT_DANGEROUS_DUNDERS.copy())
     ascii_check: bool = True
     protected_member_check: bool = True
@@ -61,24 +57,22 @@ __settings = SecuritySettings()
 
 def configure_security(
     blocked_modules: Optional[set[str]] = None,
-    allowed_builtins: Optional[set[str]] = None,
-    allowed_modules: Optional[set[Optional[str]]] = None,
+    allowed_modules: Optional[dict[str, Optional[set[Optional[str]]]]] = None,
     dangerous_dunders: Optional[set[str]] = None,
 ) -> None:
     """Configure security settings for import_from_address.
 
     Args:
         blocked_modules (Optional[set[str]]): Set of module names to block. If None, use default blocked modules.
-        allowed_builtins (Optional[set[str]]): Set of builtin names to allow. If None, use default allowed builtins.
-        allowed_modules (Optional[set[Optional[str]]]): Set of module names to allow.
-            If None, use default allowed modules. If set to an empty set, all modules are blocked.
-            If set to None, all modules except blocked ones are allowed.
+        allowed_modules (Optional[dict[str, Optional[set[Optional[str]]]]]):
+            Allowlist of module names and their allowed members. If None, use default allowed modules.
+            If the module name maps to None, the entire module is blocked.
+            If the set of the module name contains None, the entire module is allowed.
+            Otherwise, only the specified members are allowed.
         dangerous_dunders (Optional[set[str]]): Set of dangerous dunder method names to block. If None, use default.
     """
     __settings.blocked_modules.clear()
     __settings.blocked_modules.update(DEFAULT_BLOCKED_MODULES if blocked_modules is None else blocked_modules)
-    __settings.allowed_builtins.clear()
-    __settings.allowed_builtins.update(DEFAULT_ALLOWED_BUILTINS if allowed_builtins is None else allowed_builtins)
     __settings.allowed_modules.clear()
     __settings.allowed_modules.update(DEFAULT_ALLOWED_MODULES if allowed_modules is None else allowed_modules)
     __settings.dangerous_dunders.clear()
@@ -129,12 +123,11 @@ def validate_import(module_name: str, target: str) -> None:
     Raises:
         SecurityError: If the import is blocked by security settings.
     """
-    if module_name == "builtins":
-        if target not in __settings.allowed_builtins:
-            raise SecurityError(f"Blocked builtin import attempt: {target}")
-    elif None not in __settings.allowed_modules:
-        if not any(n and (module_name == n or module_name.startswith(f"{n}.")) for n in __settings.allowed_modules):
-            raise SecurityError(f"Blocked import attempt (not in allowlist): {module_name}.{target}")
+    allowed_set = __settings.allowed_modules.get(module_name, None)
+    if allowed_set is None:
+        raise SecurityError(f"Blocked import attempt (not in allowlist): {module_name}.{target}")
+    if None not in allowed_set and target not in allowed_set:
+        raise SecurityError(f"Blocked import attempt (not in allowlist): {module_name}.{target}")
     if any(n and (module_name == n or module_name.startswith(f"{n}.")) for n in __settings.blocked_modules):
         raise SecurityError(f"Blocked import attempt (blocklisted): {module_name}.{target}")
 

@@ -1,7 +1,6 @@
 """Tests for instantiation functionalities - Fixed version."""
 
 from collections import Counter
-from collections.abc import Generator
 import math
 from pathlib import Path
 import time
@@ -148,7 +147,7 @@ class TestPatternBuild:
         test_file = tmp_path / "mymodule.py"
         test_file.write_text("def my_func(): return 42")
         # Need to allow the custom module temporarily
-        with temporary_registered_dir(tmp_path), configure_security_context(allowed_modules={"mymodule"}):
+        with temporary_registered_dir(tmp_path), configure_security_context(allowed_modules={"mymodule": {None}}):
             result = AddressPattern.model_validate({"_addr_": "my_func", "_file_": test_file}).build()
             assert len(result.runs) == 1
             assert callable(result.runs[0])
@@ -444,12 +443,6 @@ class TestSecurityAndInjectionAttacks:
 class TestSecurityBypassWithConfigureSecurity:
     """Test attempts to bypass security using only allowed_modules parameter."""
 
-    @pytest.fixture(autouse=True)
-    def wrap_context(self) -> Generator[None, Any, None]:
-        """Automatically wrap each test in a security context allowing all modules."""
-        with configure_security_context(allowed_modules={None}):
-            yield
-
     @pytest.mark.parametrize("builtin", ["eval", "exec", "compile", "__import__", "getattr", "setattr", "globals"])
     def test_allowed_modules_does_not_bypass_blocked_builtins(self, builtin: str) -> None:
         """Verify that allowed_modules cannot bypass blocked_builtins."""
@@ -470,7 +463,7 @@ class TestSecurityBypassWithConfigureSecurity:
     def test_conclusion_security_is_layered(self) -> None:
         """Demonstrate that security is properly layered."""
         # Private member protection
-        with pytest.raises((ValidationError, SecurityError)):
+        with pytest.raises(SecurityError, match="__class__"):
             instantiate(["_obj_", {"_addr_": "list"}, {"_attr_": "__class__"}])
 
 
