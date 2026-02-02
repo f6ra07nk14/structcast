@@ -26,8 +26,8 @@ DEFAULT_ALLOWED_MODULES: set[Optional[str]] = {
     # --- Project Self-Ref ---
     "structcast",
 }
+"""Default allowed modules for StructCast instantiation."""
 
-# Security: Dangerous modules that should be blocked by default
 DEFAULT_BLOCKED_MODULES: set[str] = {
     # --- System & Process Management ---
     "os",  # Operating system interfaces (file system, process management)
@@ -88,8 +88,8 @@ DEFAULT_BLOCKED_MODULES: set[str] = {
     # --- Protecting Self-Import ---
     "structcast.utils.security",  # Prevent self-import to avoid security bypass
 }
+"""Default blocked modules for StructCast instantiation."""
 
-# Security: Only strictly safe builtins are allowed
 DEFAULT_ALLOWED_BUILTINS: set[str] = {
     # --- Data Types (Constructors) ---
     "bool",
@@ -142,8 +142,8 @@ DEFAULT_ALLOWED_BUILTINS: set[str] = {
     "KeyError",
     "IndexError",
 }
+"""Default allowed builtins for StructCast instantiation."""
 
-# Security: Dangerous dunder methods that should be blocked by default
 DEFAULT_DANGEROUS_DUNDERS: set[str] = {
     "__subclasses__",
     "__bases__",
@@ -155,3 +155,4 @@ DEFAULT_DANGEROUS_DUNDERS: set[str] = {
     "__init__",
     "__import__",
 }
+"""Default dangerous dunder attributes to block during instantiation."""
