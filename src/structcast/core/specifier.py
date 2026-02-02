@@ -10,7 +10,7 @@ from typing import Any, Callable, Optional, Union, cast
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, TypeAdapter, field_validator, model_validator
 from typing_extensions import Self
 
-from structcast.core.constants import SPEC_CONSTANT, SPEC_FORMAT, SPEC_SOURCE
+from structcast.core.constants import SPEC_CONSTANT, SPEC_FORMAT, SPEC_PREFIX, SPEC_SOURCE
 from structcast.core.instantiator import ObjectPattern
 from structcast.utils.base import check_elements
 from structcast.utils.dataclasses import dataclass
@@ -32,19 +32,17 @@ class __SpecSettings:
     """Settings for specification conversion and accessors."""
 
     resolvers: dict[str, tuple[str, Callable[[str], Any]]] = field(default_factory=dict)
-    castings: dict[str, Callable[[Any], Any]] = field(default_factory=dict)
     accessers: list[tuple[type, Callable[[Any, Union[str, int]], tuple[bool, Any]]]] = field(default_factory=list)
     support_basemodel: bool = True
     support_attribute: bool = True
     raise_error: bool = False
 
-    def register_resolver(self, name: str, resolver: Callable[[str], Any], casting: Callable[[Any], Any]) -> None:
+    def register_resolver(self, name: str, resolver: Callable[[str], Any]) -> None:
         """Register a resolver for specification conversion.
 
         Args:
             name (str): The name of the resolver.
             resolver (Callable[[str], Any]): The resolver function that takes a string and returns a resolved value.
-            casting (Callable[[Any], Any]): The casting function that takes a resolved value and returns a casted value.
 
         Raises:
             ValueError: If the resolver name is already registered.
@@ -53,7 +51,6 @@ class __SpecSettings:
             raise ValueError(f"Resolver '{name}' is already registered.")
         spec_id = SPEC_FORMAT.format(resolver=name)
         self.resolvers[name] = spec_id, resolver
-        self.castings[spec_id] = casting
 
 
 SPEC_SETTINGS = __SpecSettings()
@@ -291,10 +288,9 @@ def construct(
         return type(spec)(**{k: construct(data, v, **kwargs) for k, v in spec.items()})
     if SPEC_SOURCE in spec:
         return access(data, cast(tuple[Union[int, str], ...], spec[1:]), **kwargs)
-    if SPEC_CONSTANT in spec:
+    spec_id = spec[0]
+    if isinstance(spec_id, str) and spec_id.startswith(SPEC_PREFIX):
         return spec[1]
-    if spec[0] in SPEC_SETTINGS.castings:
-        return SPEC_SETTINGS.castings[spec[0]](spec[1])
     return type(spec)(construct(data, v, **kwargs) for v in spec)
 
 
