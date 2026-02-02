@@ -5,7 +5,16 @@ from logging import getLogger
 from pathlib import Path
 from typing import Optional
 
-from structcast.utils.constants import DEFAULT_ALLOWED_MODULES, DEFAULT_BLOCKED_MODULES, DEFAULT_DANGEROUS_DUNDERS
+from structcast.utils.constants import (
+    DEFAULT_ALLOWED_MODULES,
+    DEFAULT_ASCII_CHECK,
+    DEFAULT_BLOCKED_MODULES,
+    DEFAULT_DANGEROUS_DUNDERS,
+    DEFAULT_HIDDEN_CHECK,
+    DEFAULT_PRIVATE_MEMBER_CHECK,
+    DEFAULT_PROTECTED_MEMBER_CHECK,
+    DEFAULT_WORKING_DIR_CHECK,
+)
 from structcast.utils.dataclasses import dataclass
 from structcast.utils.types import PathLike
 
@@ -35,7 +44,7 @@ def resolve_path(path: Path) -> Optional[Path]:
 
 
 @dataclass
-class SecuritySettings:
+class __SecuritySettings:
     """Settings for security-related restrictions."""
 
     allowed_directories: list[Path] = field(default_factory=list)
@@ -44,14 +53,14 @@ class SecuritySettings:
         default_factory=lambda: DEFAULT_ALLOWED_MODULES.copy()
     )
     dangerous_dunders: set[str] = field(default_factory=lambda: DEFAULT_DANGEROUS_DUNDERS.copy())
-    ascii_check: bool = True
-    protected_member_check: bool = True
-    private_member_check: bool = True
-    hidden_check: bool = True
-    working_dir_check: bool = True
+    ascii_check: bool = DEFAULT_ASCII_CHECK
+    protected_member_check: bool = DEFAULT_PROTECTED_MEMBER_CHECK
+    private_member_check: bool = DEFAULT_PRIVATE_MEMBER_CHECK
+    hidden_check: bool = DEFAULT_HIDDEN_CHECK
+    working_dir_check: bool = DEFAULT_WORKING_DIR_CHECK
 
 
-__settings = SecuritySettings()
+__settings = __SecuritySettings()
 """Global security settings instance."""
 
 
@@ -59,6 +68,11 @@ def configure_security(
     blocked_modules: Optional[set[str]] = None,
     allowed_modules: Optional[dict[str, Optional[set[Optional[str]]]]] = None,
     dangerous_dunders: Optional[set[str]] = None,
+    ascii_check: Optional[bool] = None,
+    protected_member_check: Optional[bool] = None,
+    private_member_check: Optional[bool] = None,
+    hidden_check: Optional[bool] = None,
+    working_dir_check: Optional[bool] = None,
 ) -> None:
     """Configure security settings for import_from_address.
 
@@ -70,6 +84,12 @@ def configure_security(
             If the set of the module name contains None, the entire module is allowed.
             Otherwise, only the specified members are allowed.
         dangerous_dunders (Optional[set[str]]): Set of dangerous dunder method names to block. If None, use default.
+        ascii_check (Optional[bool]): Whether to block non-ASCII attribute names. If None, use default.
+        protected_member_check (Optional[bool]): Whether to block protected member access. If None, use default.
+        private_member_check (Optional[bool]): Whether to block private member access. If None, use default.
+        hidden_check (Optional[bool]): Whether to block paths with hidden directories. If None, use default.
+        working_dir_check (Optional[bool]): Whether to ensure relative paths resolve within allowed directories.
+            If None, use default.
     """
     __settings.blocked_modules.clear()
     __settings.blocked_modules.update(DEFAULT_BLOCKED_MODULES if blocked_modules is None else blocked_modules)
@@ -77,6 +97,15 @@ def configure_security(
     __settings.allowed_modules.update(DEFAULT_ALLOWED_MODULES if allowed_modules is None else allowed_modules)
     __settings.dangerous_dunders.clear()
     __settings.dangerous_dunders.update(DEFAULT_DANGEROUS_DUNDERS if dangerous_dunders is None else dangerous_dunders)
+    __settings.ascii_check = DEFAULT_ASCII_CHECK if ascii_check is None else ascii_check
+    __settings.protected_member_check = (
+        DEFAULT_PROTECTED_MEMBER_CHECK if protected_member_check is None else protected_member_check
+    )
+    __settings.private_member_check = (
+        DEFAULT_PRIVATE_MEMBER_CHECK if private_member_check is None else private_member_check
+    )
+    __settings.hidden_check = DEFAULT_HIDDEN_CHECK if hidden_check is None else hidden_check
+    __settings.working_dir_check = DEFAULT_WORKING_DIR_CHECK if working_dir_check is None else working_dir_check
 
 
 def register_dir(path: PathLike) -> None:

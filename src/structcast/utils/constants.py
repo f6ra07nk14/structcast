@@ -2,6 +2,21 @@
 
 from typing import Optional
 
+DEFAULT_ASCII_CHECK = True
+"""Default setting for ASCII attribute name check."""
+
+DEFAULT_PROTECTED_MEMBER_CHECK = True
+"""Default setting for protected member attribute name check."""
+
+DEFAULT_PRIVATE_MEMBER_CHECK = True
+"""Default setting for private member attribute name check."""
+
+DEFAULT_HIDDEN_CHECK = True
+"""Default setting for hidden attribute name check."""
+
+DEFAULT_WORKING_DIR_CHECK = True
+"""Default setting for working directory check."""
+
 DEFAULT_DANGEROUS_DUNDERS: set[str] = {
     *{"__subclasses__", "__bases__", "__globals__", "__code__", "__dict__"},
     *{"__class__", "__mro__", "__init__", "__import__"},
