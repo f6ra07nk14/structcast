@@ -120,12 +120,20 @@ class AttributePattern(BasePattern):
         if not runs:
             raise InstantiationError("No object to access attribute from.")
         runs, last = runs[:-1], runs[-1]
-        if hasattr(last, self.attribute):
-            run = getattr(last, self.attribute)
-            return res_t(patterns=ptns + [self], runs=runs + [run], depth=depth, start_time=start_time)
-        typ_n = type(last).__name__
-        msg = f'Attribute "{self.attribute}" not found in object of type {typ_n} built from previous patterns: {ptns}'
-        raise InstantiationError(msg)
+        obj, attrs = last, self.attribute.split(".")
+        for attr in attrs:
+            if hasattr(obj, attr):
+                obj = getattr(obj, attr)
+            else:
+                if last == obj:
+                    msg = f'Attribute "{attr}" not found in object of type {type(obj).__name__} '
+                    f"built from previous patterns: {ptns}"
+                else:
+                    msg = f'Attribute "{attr}" not found in intermediate object of type {type(obj).__name__} '
+                    f'while accessing "{self.attribute}" on object of type {type(last).__name__} '
+                    f"built from previous patterns: {ptns}"
+                raise InstantiationError(msg)
+        return res_t(patterns=ptns + [self], runs=runs + [obj], depth=depth, start_time=start_time)
 
 
 class CallPattern(BasePattern):
