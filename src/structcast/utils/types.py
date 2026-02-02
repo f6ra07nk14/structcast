@@ -1,10 +1,10 @@
 """Type definitions for StructCast utilities."""
 
-import os
+from os import PathLike as OsPathLike
 from pathlib import Path
 from typing import Union
 
 from typing_extensions import TypeAlias
 
-PathLike: TypeAlias = Union[str, os.PathLike[str], Path]
+PathLike: TypeAlias = Union[str, OsPathLike[str], Path]
 """Path-like object."""
