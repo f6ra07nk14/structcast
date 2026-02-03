@@ -5,21 +5,12 @@ from collections.abc import Mapping
 from copy import copy, deepcopy
 from dataclasses import field
 from enum import Enum
-from functools import cached_property
+from functools import cached_property, partial
 from logging import getLogger
 from re import findall as re_findall, match as re_match
 from typing import Any, Callable, Optional, Union
 
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    Field,
-    PrivateAttr,
-    TypeAdapter,
-    ValidationError,
-    field_validator,
-    model_validator,
-)
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, field_validator, model_validator
 from typing_extensions import Self
 
 from structcast.core.constants import SPEC_CONSTANT, SPEC_FORMAT, SPEC_SOURCE
@@ -406,6 +397,12 @@ def construct(
 _ALIAS_SPEC = "_spec_"
 
 
+def _casting(value: Any, *, pipe: list[Callable[[Any], Any]]) -> Any:
+    for call in pipe:
+        value = call(value)
+    return value
+
+
 class _Constructor(BaseModel, ABC):
     model_config = ConfigDict(frozen=True, validate_default=True, extra="forbid", serialize_by_alias=True)
 
@@ -424,8 +421,6 @@ class _Constructor(BaseModel, ABC):
     pipe: list[ObjectPattern] = Field(default_factory=list)
     """List of casting patterns to apply after construction."""
 
-    _pipe: list[Callable[[Any], Any]] = PrivateAttr(default_factory=list)
-
     @field_validator("pipe", mode="before")
     @classmethod
     def validate_pipe(cls, pipe: Any) -> list[ObjectPattern]:
@@ -435,12 +430,7 @@ class _Constructor(BaseModel, ABC):
     @model_validator(mode="after")
     def validate_constructor(self) -> Self:
         """Validate the constructor."""
-        _ = self.spec  # Ensure spec is valid and cached immediately
-        for ind, ptn in enumerate(self.pipe):
-            inst = ptn.build().runs[0]
-            if not callable(inst):
-                raise SpecError(f"Invalid pipe at position {ind} is not callable: {inst}")
-            self._pipe.append(inst)
+        _, _ = self.spec, self.casting  # Ensure spec and casting are initialized and cached
         return self
 
     @abstractmethod
@@ -454,13 +444,13 @@ class _Constructor(BaseModel, ABC):
     @cached_property
     def casting(self) -> Callable[[Any], Any]:
         """Get the casting function."""
-
-        def _cast(value: Any) -> Any:
-            for func in self._pipe:
-                value = func(value)
-            return value
-
-        return _cast
+        pipe: list[Callable[[Any], Any]] = []
+        for ind, ptn in enumerate(self.pipe):
+            inst = ptn.build().runs[0]
+            if not callable(inst):
+                raise SpecError(f"Invalid pipe at position {ind} is not callable: {inst}")
+            pipe.append(inst)
+        return partial(_casting, pipe=pipe)
 
     @cached_property
     def construct_kwargs(self) -> dict[str, Any]:
