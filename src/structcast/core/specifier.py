@@ -484,6 +484,10 @@ class RawSpec(_Constructor):
     @classmethod
     def validate_raw(cls, raw: Any) -> Any:
         """Validate the raw field."""
+        if isinstance(raw, RawSpec):
+            return raw
+        if isinstance(raw, BaseModel):
+            raw = raw.model_dump()
         return raw if isinstance(raw, (dict, Mapping)) and _ALIAS_SPEC in raw else {_ALIAS_SPEC: raw}
 
     def _get_spec(self) -> Any:
@@ -500,6 +504,12 @@ class ObjectSpec(_Constructor):
     @classmethod
     def validate_pattern(cls, raw: Any) -> Any:
         """Validate the pattern field."""
+        if isinstance(raw, ObjectSpec):
+            return raw
+        if isinstance(raw, ObjectPattern):
+            return {_ALIAS_SPEC: raw}
+        if isinstance(raw, BaseModel):
+            raw = raw.model_dump()
         try:
             return {_ALIAS_SPEC: ObjectPattern.model_validate(raw)}
         except ValidationError:
@@ -522,6 +532,12 @@ class FlexSpec(_Constructor):
     @classmethod
     def validate_structure(cls, raw: Any) -> Any:
         """Validate the data."""
+        if isinstance(raw, FlexSpec):
+            return raw
+        if isinstance(raw, (ObjectSpec, RawSpec)):
+            return {_ALIAS_SPEC: raw}
+        if isinstance(raw, BaseModel):
+            raw = raw.model_dump()
         try:
             return {_ALIAS_SPEC: TypeAdapter(Union[ObjectSpec, RawSpec]).validate_python(raw)}
         except ValidationError:
