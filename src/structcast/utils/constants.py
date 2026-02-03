@@ -94,7 +94,7 @@ DEFAULT_ALLOWED_MODULES: dict[str, Optional[set[Optional[str]]]] = {
         *{"CLOCK_MONOTONIC", "CLOCK_MONOTONIC_RAW", "CLOCK_PROCESS_CPUTIME_ID", "CLOCK_REALTIME"},
         *{"CLOCK_THREAD_CPUTIME_ID", "CLOCK_HIGHRES", "CLOCK_UPTIME_RAW", "CLOCK_UPTIME_RAW_APPROX"},
         *{"CLOCK_MONOTONIC_RAW_APPROX", "CLOCK_TAI", "struct_time", "asctime", "ctime", "gmtime", "localtime"},
-        *{"mktime", "strftime", "time", "tzset", "get_clock_info", "monotonic", "perf_counter", "process_time"},
+        *{"mktime", "strftime", "time", "get_clock_info", "monotonic", "perf_counter", "process_time"},
         *{"clock_getres", "clock_gettime", "clock_gettime_ns", "pthread_getcpuclockid", "monotonic_ns"},
         *{"perf_counter_ns", "process_time_ns", "time_ns", "thread_time", "thread_time_ns"},
     },
@@ -110,7 +110,7 @@ DEFAULT_ALLOWED_MODULES: dict[str, Optional[set[Optional[str]]]] = {
         *{"ROUND_DOWN", "ROUND_HALF_UP", "ROUND_HALF_EVEN", "ROUND_CEILING", "ROUND_FLOOR", "ROUND_UP"},
         *{"ROUND_HALF_DOWN", "ROUND_05UP"},
         *{"HAVE_CONTEXTVAR", "HAVE_THREADS", "MAX_EMAX", "MAX_PREC", "MIN_EMIN", "MIN_ETINY"},
-        *{"setcontext", "getcontext", "localcontext", "DefaultContext", "BasicContext", "ExtendedContext"},
+        *{"getcontext", "localcontext", "DefaultContext", "BasicContext", "ExtendedContext"},
     },
     "enum": {"EnumMeta", "Enum", "IntEnum", "Flag", "IntFlag", "auto", "unique"},
     # --- Logic & Math ---
@@ -135,7 +135,7 @@ DEFAULT_ALLOWED_MODULES: dict[str, Optional[set[Optional[str]]]] = {
     "random": {
         *{"Random", "SystemRandom", "betavariate", "choice", "choices", "expovariate", "gammavariate", "gauss"},
         *{"getrandbits", "getstate", "lognormvariate", "normalvariate", "paretovariate", "randbytes", "randint"},
-        *{"random", "randrange", "sample", "seed", "setstate", "shuffle", "triangular", "uniform"},
+        *{"random", "randrange", "sample", "seed", "shuffle", "triangular", "uniform"},
         *{"vonmisesvariate", "weibullvariate"},
     },
     "secrets": {
@@ -143,10 +143,9 @@ DEFAULT_ALLOWED_MODULES: dict[str, Optional[set[Optional[str]]]] = {
         *{"token_urlsafe", "compare_digest"},
     },
     "operator": {
-        *{"abs", "add", "and_", "concat", "contains", "countOf", "eq", "floordiv", "ge", "getitem", "gt", "iadd"},
-        *{"iand", "iconcat", "ifloordiv", "ilshift", "imatmul", "imod", "imul", "index", "indexOf", "inv", "invert"},
-        *{"ior", "ipow", "irshift", "is_", "is_not", "isub", "itemgetter", "itruediv", "ixor", "le", "length_hint"},
-        *{"lshift", "lt", "matmul", "methodcaller", "mod", "mul", "ne", "neg", "not_", "or_", "pos", "pow", "rshift"},
+        *{"abs", "add", "and_", "concat", "contains", "countOf", "eq", "floordiv", "ge", "getitem", "gt", "index"},
+        *{"indexOf", "inv", "invert", "is_", "is_not", "itemgetter", "le", "length_hint", "lshift", "lt", "matmul"},
+        *{"methodcaller", "mod", "mul", "ne", "neg", "not_", "or_", "pos", "pow", "rshift"},
         *{"sub", "truediv", "truth", "xor"},
     },
     # --- Text & Encoding ---
@@ -159,7 +158,7 @@ DEFAULT_ALLOWED_MODULES: dict[str, Optional[set[Optional[str]]]] = {
         *{"b16encode", "b16decode", "b85encode", "b85decode", "a85encode", "a85decode"},
         *{"standard_b64encode", "standard_b64decode", "urlsafe_b64encode", "urlsafe_b64decode"},
     },
-    "json": {"dump", "dumps", "load", "loads", "JSONDecoder", "JSONDecodeError", "JSONEncoder"},
+    "json": {"dumps", "load", "loads", "JSONDecoder", "JSONDecodeError", "JSONEncoder"},
     "html": {"escape", "unescape"},
     # --- Parsing (Network safe) ---
     "urllib.parse": {
