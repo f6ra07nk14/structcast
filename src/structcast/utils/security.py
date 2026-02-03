@@ -123,12 +123,9 @@ def configure_security(
         if working_dir_check is not None:
             kwargs["working_dir_check"] = working_dir_check
         settings = SecuritySettings(**kwargs)
-    __security_settings.blocked_modules.clear()
-    __security_settings.blocked_modules.update(settings.blocked_modules)
-    __security_settings.allowed_modules.clear()
-    __security_settings.allowed_modules.update(settings.allowed_modules)
-    __security_settings.dangerous_dunders.clear()
-    __security_settings.dangerous_dunders.update(settings.dangerous_dunders)
+    __security_settings.blocked_modules = settings.blocked_modules
+    __security_settings.allowed_modules = settings.allowed_modules
+    __security_settings.dangerous_dunders = settings.dangerous_dunders
     __security_settings.ascii_check = settings.ascii_check
     __security_settings.protected_member_check = settings.protected_member_check
     __security_settings.private_member_check = settings.private_member_check
