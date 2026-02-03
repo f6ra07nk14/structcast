@@ -1,20 +1,12 @@
 """Security-related utilities and settings for structcast."""
 
+from copy import deepcopy
 from dataclasses import field
 from logging import getLogger
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
-from structcast.utils.constants import (
-    DEFAULT_ALLOWED_MODULES,
-    DEFAULT_ASCII_CHECK,
-    DEFAULT_BLOCKED_MODULES,
-    DEFAULT_DANGEROUS_DUNDERS,
-    DEFAULT_HIDDEN_CHECK,
-    DEFAULT_PRIVATE_MEMBER_CHECK,
-    DEFAULT_PROTECTED_MEMBER_CHECK,
-    DEFAULT_WORKING_DIR_CHECK,
-)
+from structcast.utils.constants import DEFAULT_ALLOWED_MODULES, DEFAULT_BLOCKED_MODULES, DEFAULT_DANGEROUS_DUNDERS
 from structcast.utils.dataclasses import dataclass
 from structcast.utils.types import PathLike
 
@@ -44,40 +36,66 @@ def resolve_path(path: Path) -> Optional[Path]:
 
 
 @dataclass
-class __SecuritySettings:
+class SecuritySettings:
     """Settings for security-related restrictions."""
 
-    allowed_directories: list[Path] = field(default_factory=list)
-    blocked_modules: set[str] = field(default_factory=lambda: DEFAULT_BLOCKED_MODULES.copy())
+    blocked_modules: set[str] = field(default_factory=lambda: deepcopy(DEFAULT_BLOCKED_MODULES))
+    """Set of module names to block."""
+
     allowed_modules: dict[str, Optional[set[Optional[str]]]] = field(
-        default_factory=lambda: DEFAULT_ALLOWED_MODULES.copy()
+        default_factory=lambda: deepcopy(DEFAULT_ALLOWED_MODULES)
     )
-    dangerous_dunders: set[str] = field(default_factory=lambda: DEFAULT_DANGEROUS_DUNDERS.copy())
-    ascii_check: bool = DEFAULT_ASCII_CHECK
-    protected_member_check: bool = DEFAULT_PROTECTED_MEMBER_CHECK
-    private_member_check: bool = DEFAULT_PRIVATE_MEMBER_CHECK
-    hidden_check: bool = DEFAULT_HIDDEN_CHECK
-    working_dir_check: bool = DEFAULT_WORKING_DIR_CHECK
+    """Allowlist of module names and their allowed members.
+
+    If the module name maps to None, the entire module is blocked.
+    If the set of the module name contains None, the entire module is allowed.
+    Otherwise, only the specified members are allowed.
+    """
+
+    dangerous_dunders: set[str] = field(default_factory=lambda: deepcopy(DEFAULT_DANGEROUS_DUNDERS))
+    """Set of dangerous dunder method names to block."""
+
+    ascii_check: bool = True
+    """Whether to block non-ASCII attribute names."""
+
+    protected_member_check: bool = True
+    """Whether to block protected member access."""
+
+    private_member_check: bool = True
+    """Whether to block private member access."""
+
+    hidden_check: bool = True
+    """Whether to block paths with hidden directories."""
+
+    working_dir_check: bool = True
+    """Whether to ensure relative paths resolve within allowed directories."""
 
 
-SECURITY_SETTINGS = __SecuritySettings()
+__allowed_directories: list[Path] = []
+__security_settings = SecuritySettings()
 """Global security settings instance."""
 
 
 def configure_security(
+    settings: Optional[SecuritySettings] = None,
+    *,
     blocked_modules: Optional[set[str]] = None,
     allowed_modules: Optional[dict[str, Optional[set[Optional[str]]]]] = None,
     dangerous_dunders: Optional[set[str]] = None,
+    ascii_check: Optional[bool] = None,
+    protected_member_check: Optional[bool] = None,
+    private_member_check: Optional[bool] = None,
+    hidden_check: Optional[bool] = None,
+    working_dir_check: Optional[bool] = None,
 ) -> None:
     """Configure security settings for import_from_address.
 
     Args:
+        settings (Optional[SecuritySettings]): A SecuritySettings instance to use.
+            If None, individual parameters are used.
         blocked_modules (Optional[set[str]]): Set of module names to block. If None, use default blocked modules.
         allowed_modules (Optional[dict[str, Optional[set[Optional[str]]]]]):
             Allowlist of module names and their allowed members. If None, use default allowed modules.
-            If the module name maps to None, the entire module is blocked.
-            If the set of the module name contains None, the entire module is allowed.
-            Otherwise, only the specified members are allowed.
         dangerous_dunders (Optional[set[str]]): Set of dangerous dunder method names to block. If None, use default.
         ascii_check (Optional[bool]): Whether to block non-ASCII attribute names. If None, use default.
         protected_member_check (Optional[bool]): Whether to block protected member access. If None, use default.
@@ -86,13 +104,36 @@ def configure_security(
         working_dir_check (Optional[bool]): Whether to ensure relative paths resolve within allowed directories.
             If None, use default.
     """
-    SECURITY_SETTINGS.blocked_modules.clear()
-    SECURITY_SETTINGS.blocked_modules.update(DEFAULT_BLOCKED_MODULES if blocked_modules is None else blocked_modules)
-    SECURITY_SETTINGS.allowed_modules.clear()
-    SECURITY_SETTINGS.allowed_modules.update(DEFAULT_ALLOWED_MODULES if allowed_modules is None else allowed_modules)
-    SECURITY_SETTINGS.dangerous_dunders.clear()
-    dangerous_dunders = DEFAULT_DANGEROUS_DUNDERS if dangerous_dunders is None else dangerous_dunders
-    SECURITY_SETTINGS.dangerous_dunders.update(dangerous_dunders)
+    if settings is None:
+        kwargs: dict[str, Any] = {}
+        if blocked_modules is not None:
+            kwargs["blocked_modules"] = blocked_modules
+        if allowed_modules is not None:
+            kwargs["allowed_modules"] = allowed_modules
+        if dangerous_dunders is not None:
+            kwargs["dangerous_dunders"] = dangerous_dunders
+        if ascii_check is not None:
+            kwargs["ascii_check"] = ascii_check
+        if protected_member_check is not None:
+            kwargs["protected_member_check"] = protected_member_check
+        if private_member_check is not None:
+            kwargs["private_member_check"] = private_member_check
+        if hidden_check is not None:
+            kwargs["hidden_check"] = hidden_check
+        if working_dir_check is not None:
+            kwargs["working_dir_check"] = working_dir_check
+        settings = SecuritySettings(**kwargs)
+    __security_settings.blocked_modules.clear()
+    __security_settings.blocked_modules.update(settings.blocked_modules)
+    __security_settings.allowed_modules.clear()
+    __security_settings.allowed_modules.update(settings.allowed_modules)
+    __security_settings.dangerous_dunders.clear()
+    __security_settings.dangerous_dunders.update(settings.dangerous_dunders)
+    __security_settings.ascii_check = settings.ascii_check
+    __security_settings.protected_member_check = settings.protected_member_check
+    __security_settings.private_member_check = settings.private_member_check
+    __security_settings.hidden_check = settings.hidden_check
+    __security_settings.working_dir_check = settings.working_dir_check
 
 
 def register_dir(path: PathLike) -> None:
@@ -106,10 +147,10 @@ def register_dir(path: PathLike) -> None:
     resolved_path = resolve_path(path)
     if resolved_path is None or not resolved_path.is_dir():
         raise ValueError(f"Path is not a valid directory: {path}")
-    if resolved_path in SECURITY_SETTINGS.allowed_directories:
+    if resolved_path in __allowed_directories:
         logger.warning(f"Directory is already registered. Skip registering: {path}")
     else:
-        SECURITY_SETTINGS.allowed_directories.append(resolved_path)
+        __allowed_directories.append(resolved_path)
 
 
 def unregister_dir(path: PathLike) -> None:
@@ -124,7 +165,7 @@ def unregister_dir(path: PathLike) -> None:
     if resolved_path is None or not resolved_path.is_dir():
         raise ValueError(f"Path is not a valid directory: {path}")
     try:
-        SECURITY_SETTINGS.allowed_directories.remove(resolved_path)
+        __allowed_directories.remove(resolved_path)
     except ValueError:
         logger.warning(f"Directory was not registered. Skip unregistering: {path}")
 
@@ -139,12 +180,12 @@ def validate_import(module_name: str, target: str) -> None:
     Raises:
         SecurityError: If the import is blocked by security settings.
     """
-    allowed_set = SECURITY_SETTINGS.allowed_modules.get(module_name, None)
+    allowed_set = __security_settings.allowed_modules.get(module_name, None)
     if allowed_set is None:
         raise SecurityError(f"Blocked import attempt (not in allowlist): {module_name}.{target}")
     if None not in allowed_set and target not in allowed_set:
         raise SecurityError(f"Blocked import attempt (not in allowlist): {module_name}.{target}")
-    if any(n and (module_name == n or module_name.startswith(f"{n}.")) for n in SECURITY_SETTINGS.blocked_modules):
+    if any(n and (module_name == n or module_name.startswith(f"{n}.")) for n in __security_settings.blocked_modules):
         raise SecurityError(f"Blocked import attempt (blocklisted): {module_name}.{target}")
 
 
@@ -155,18 +196,18 @@ def _validate_attribute(
     private_member_check: Optional[bool] = None,
     ascii_check: Optional[bool] = None,
 ) -> None:
-    ascii_check = SECURITY_SETTINGS.ascii_check if ascii_check is None else ascii_check
+    ascii_check = __security_settings.ascii_check if ascii_check is None else ascii_check
     protected_member_check = (
-        SECURITY_SETTINGS.protected_member_check if protected_member_check is None else protected_member_check
+        __security_settings.protected_member_check if protected_member_check is None else protected_member_check
     )
     private_member_check = (
-        SECURITY_SETTINGS.private_member_check if private_member_check is None else private_member_check
+        __security_settings.private_member_check if private_member_check is None else private_member_check
     )
     if not target.isidentifier() or target != target.strip():
         raise SecurityError(f"Invalid attribute access attempt: {repr(target)}")
     if ascii_check and not target.isascii():
         raise SecurityError(f"Non-ASCII attribute access attempt: {repr(target)}")
-    if target in SECURITY_SETTINGS.dangerous_dunders:
+    if target in __security_settings.dangerous_dunders:
         raise SecurityError(f"Dangerous dunder access attempt: {repr(target)}")
     is_private = target.startswith("__")
     is_protected = target.startswith("_") and not is_private
@@ -232,20 +273,20 @@ def check_path(
         FileNotFoundError: If the path does not exist.
         SecurityError: If the path is blocked by security settings.
     """
-    hidden_check = SECURITY_SETTINGS.hidden_check if hidden_check is None else hidden_check
-    working_dir_check = SECURITY_SETTINGS.working_dir_check if working_dir_check is None else working_dir_check
+    hidden_check = __security_settings.hidden_check if hidden_check is None else hidden_check
+    working_dir_check = __security_settings.working_dir_check if working_dir_check is None else working_dir_check
     if not isinstance(path, Path):
         path = Path(path)
     candidate: Optional[Path] = resolve_path(path)
     if not path.is_absolute():
-        allowed_directories = SECURITY_SETTINGS.allowed_directories.copy()
+        allowed_directories = __allowed_directories.copy()
         while candidate is None and allowed_directories:
             candidate = resolve_path(allowed_directories.pop(0) / path)
     if candidate is None:
         raise FileNotFoundError(f"Path does not exist: {path}")
     if working_dir_check and not (
         (candidate.is_relative_to(Path.home()) and candidate.is_relative_to(Path.cwd()))
-        or any(candidate.is_relative_to(d) for d in SECURITY_SETTINGS.allowed_directories)
+        or any(candidate.is_relative_to(d) for d in __allowed_directories)
     ):
         raise SecurityError(f"Path is outside of allowed directories: {path}")
     if hidden_check and any(p.startswith(".") for p in candidate.parts):
