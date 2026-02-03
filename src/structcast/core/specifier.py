@@ -230,48 +230,43 @@ def _access_default(
     return_type: ReturnType,
     accessers: list[tuple[type, Callable[[Any, Union[str, int]], tuple[bool, Any]]]],
     raise_error: bool,
-    __data__: Any,
-    __source__: Optional[str],
 ) -> Any:
-    if not source:
-        return data
-    index, source = source[0], source[1:]
-    kwargs: dict[str, Any] = {
-        "return_type": return_type,
-        "accessers": accessers,
-        "raise_error": raise_error,
-        "__data__": __data__,
-        "__source__": __source__,
-    }
-    if isinstance(data, (dict, Mapping)):
-        if index in data:
-            return _return_value(_access_default(data[index], source, **kwargs), return_type=return_type)
-        else:
-            msg = f"Key ({_str_index(index)}) not found in mapping at source ({__source__}): {__data__}"
-    elif isinstance(data, (list, tuple)):
-        if isinstance(index, int):
-            if 0 <= index < len(data):
-                return _return_value(_access_default(data[index], source, **kwargs), return_type=return_type)
+    def _access(target: Any, indices: tuple[Union[int, str], ...]) -> Any:
+        if not indices:
+            return target
+        index, indices = indices[0], indices[1:]
+        if isinstance(target, (dict, Mapping)):
+            if index in target:
+                return _return_value(_access(target[index], indices), return_type=return_type)
             else:
-                msg = f"Index ({index}) out of range in sequence at source ({__source__}): {__data__}"
-        else:
-            msg = f"Non-integer index ({_str_index(index)}) used for sequence at source ({__source__}): {__data__}"
-    else:
-        for data_type, accesser in accessers:
-            if isinstance(data, data_type):
-                success, value = accesser(data, index)
-                if success:
-                    return _return_value(_access_default(value, source, **kwargs), return_type=return_type)
+                i_str, s_str = _str_index(index), _str_source(source)
+                msg = f"Key ({i_str}) not found in mapping at source ({s_str}): {data}"
+        elif isinstance(target, (list, tuple)):
+            if isinstance(index, int):
+                if 0 <= index < len(target):
+                    return _return_value(_access(target[index], indices), return_type=return_type)
                 else:
-                    logger.debug(
-                        f"Accesser for type ({data_type.__name__}) failed to access index ({_str_index(index)}) "
-                        f"at source ({__source__})."
-                    )
-        msg = f"Cannot index into type ({type(data).__name__}) at source ({__source__}): {__data__}"
-    if raise_error:
-        raise SpecError(msg)
-    logger.warning(msg)
-    return None
+                    i_str, s_str = _str_index(index), _str_source(source)
+                    msg = f"Index ({i_str}) out of range in sequence at source ({s_str}): {data}"
+            else:
+                i_str, s_str = _str_index(index), _str_source(source)
+                msg = f"Non-integer index ({i_str}) used for sequence at source ({s_str}): {data}"
+        else:
+            i_str, s_str = _str_index(index), _str_source(source)
+            for data_type, accesser in accessers:
+                if isinstance(target, data_type):
+                    success, value = accesser(target, index)
+                    if success:
+                        return _return_value(_access(value, indices), return_type=return_type)
+                    t_str = data_type.__name__
+                    logger.debug(f"Accesser for type ({t_str}) failed to access index ({i_str}) at source ({s_str}).")
+            msg = f"Cannot index into type ({type(target).__name__}) at source ({s_str}): {data}"
+        if raise_error:
+            raise SpecError(msg)
+        logger.warning(msg)
+        return None
+
+    return _access(data, source)
 
 
 def _access_basemodel(instance: BaseModel, index: Union[str, int]) -> tuple[bool, Any]:
@@ -334,7 +329,7 @@ def access(
     if support_basemodel:
         accessers = [(BaseModel, _access_basemodel)] + accessers
     raise_error = __spec_settings.raise_error if raise_error is None else raise_error
-    return _access_default(data, source, return_type, accessers, raise_error, data, _str_source(source))
+    return _access_default(data, source, return_type, accessers, raise_error)
 
 
 def construct(
