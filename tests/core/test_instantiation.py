@@ -21,7 +21,7 @@ from structcast.core.instantiator import (
     PatternResult,
     instantiate,
 )
-from structcast.utils.base import SecurityError
+from structcast.utils.security import SecurityError
 from tests.utils import configure_security_context, temporary_registered_dir
 
 # ============================================================================

@@ -22,7 +22,7 @@ from pydantic import (
 from typing_extensions import TypeAlias
 
 from structcast.core.constants import MAX_INSTANTIATION_DEPTH, MAX_INSTANTIATION_TIME
-from structcast.utils import import_from_address
+from structcast.utils.base import import_from_address
 from structcast.utils.dataclasses import dataclass
 from structcast.utils.security import validate_attribute
 
