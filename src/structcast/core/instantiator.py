@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import field
-from functools import partial
+from functools import cached_property, partial
 from logging import getLogger
 from pathlib import Path
 from time import time
@@ -14,9 +14,11 @@ from pydantic import (
     ConfigDict,
     Field,
     FilePath,
+    SerializerFunctionWrapHandler,
     TypeAdapter,
     ValidationError,
     field_validator,
+    model_serializer,
     model_validator,
 )
 from typing_extensions import TypeAlias
@@ -153,6 +155,11 @@ class CallPattern(BasePattern):
             raise ValueError(f"Invalid call pattern: {data}")
         return data
 
+    @model_serializer(mode="wrap")
+    def _serialize_model(self, handler: SerializerFunctionWrapHandler) -> Any:
+        """Serialize the model."""
+        return handler(self) if self.call else "_call_"
+
     def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the objects from the pattern."""
         res_t, ptns, runs, depth, start = _validate_pattern_result(result)
@@ -199,15 +206,25 @@ class ObjectPattern(BasePattern):
             return {"_obj_": data[1:]}
         return data
 
+    @model_serializer(mode="wrap")
+    def _serialize_model(self, handler: SerializerFunctionWrapHandler) -> list[Any]:
+        """Serialize the model."""
+        return ["_obj_"] + handler(self.patterns)
+
+    @cached_property
+    def patterns(self) -> list[BasePattern]:
+        """Get the list of patterns."""
+        try:
+            return TypeAdapter(list[PatternLike]).validate_python(self.object)
+        except ValidationError as err:
+            raise InstantiationError(f"Failed to validate ObjectPattern contents: {err.errors()}") from err
+
     def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the runnable from the pattern."""
         res_t, ptns, runs, depth, start = _validate_pattern_result(result)
         new = res_t(depth=depth + 1, start=start)
-        try:
-            for ptn in TypeAdapter(list[PatternLike]).validate_python(self.object):
-                new = ptn.build(new)
-        except ValidationError as err:
-            raise InstantiationError(f"Failed to validate ObjectPattern contents: {err.errors()}") from err
+        for ptn in self.patterns:
+            new = ptn.build(new)
         if len(new.runs) == 1:
             return res_t(patterns=ptns + [self], runs=runs + new.runs, depth=depth, start=start)
         raise InstantiationError(f"ObjectPattern did not result in a single object (got {new.runs}): {new.patterns}")
