@@ -271,7 +271,7 @@ class TestSecurityConfiguration:
 
     def test_custom_blocked_builtins(self) -> None:
         """Test custom blocked builtins."""
-        with configure_security_context(allowed_modules={"builtins": None}):
+        with configure_security_context(allowed_modules={"builtins": None}, blocked_modules={"builtins"}):
             with pytest.raises(SecurityError, match="int"):
                 import_from_address("int")
 

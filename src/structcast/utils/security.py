@@ -52,9 +52,9 @@ class SecuritySettings:
     )
     """Allowlist of module names and their allowed members.
 
-    If the module name maps to None, the entire module is blocked.
-    If the set of the module name contains None, the entire module is allowed.
-    Otherwise, only the specified members are allowed.
+    If the value is None, switch off allowlist checking for that module.
+    If the value is a set, only the specified members are allowed.
+    If the set contains None, all members are allowed.
     """
 
     dangerous_dunders: set[str] = field(default_factory=lambda: deepcopy(DEFAULT_DANGEROUS_DUNDERS))
@@ -182,10 +182,10 @@ def validate_import(module_name: str, target: str) -> None:
     Raises:
         SecurityError: If the import is blocked by security settings.
     """
-    allowed_set = __security_settings.allowed_modules.get(module_name, None)
-    if allowed_set is None:
-        raise SecurityError(f"Blocked import attempt (not in allowlist): {module_name}.{target}")
-    if None not in allowed_set and target not in allowed_set:
+    allowed_members = __security_settings.allowed_modules.get(module_name, set())
+    if allowed_members is not None:
+        if None in allowed_members or target in allowed_members:
+            return
         raise SecurityError(f"Blocked import attempt (not in allowlist): {module_name}.{target}")
     if any(n and (module_name == n or module_name.startswith(f"{n}.")) for n in __security_settings.blocked_modules):
         raise SecurityError(f"Blocked import attempt (blocklisted): {module_name}.{target}")

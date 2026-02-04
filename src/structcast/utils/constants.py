@@ -66,7 +66,7 @@ DEFAULT_BLOCKED_MODULES: set[str] = {
     "multiprocessing",  # Process-based parallelism
     "concurrent",  # Launching parallel tasks
     # --- Protecting Self-Import ---
-    "structcast.utils.security",  # Prevent self-import to avoid security bypass
+    "structcast.utils",  # Prevent self-import to avoid security bypass
 }
 """Default blocked modules for StructCast instantiation."""
 
@@ -173,6 +173,6 @@ DEFAULT_ALLOWED_MODULES: dict[str, Optional[set[Optional[str]]]] = {
         *{"IPv4Address", "IPv4Interface", "IPv4Network", "IPv6Address", "IPv6Interface", "IPv6Network"},
     },
     # --- Project Self-Ref ---
-    "structcast.utils": {None},  # Allow all attributes from structcast.utils module
+    "structcast.utils.base": {None},  # Allow all attributes from structcast.utils module
 }
 """Default allowed modules and their allowed attributes for StructCast instantiation."""
