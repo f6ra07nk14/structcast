@@ -5,8 +5,9 @@ description = "Elegantly orchestrating structured data via a flexible and serial
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
+    "jinja2>=3.1.6",
     "pydantic>=2.11.0",
-    "ruamel-yaml>=0.19.1",
+    "ruamel-yaml[jinja2]>=0.19.1",
 ]
 
 [dependency-groups]
