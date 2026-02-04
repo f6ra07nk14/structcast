@@ -93,13 +93,13 @@ def configure_spec(
     """Configure global specification settings.
 
     Args:
-        support_basemodel (Optional[bool], optional): Whether to support BaseModel access.
+        support_basemodel (bool | None, optional): Whether to support BaseModel access.
             If None, the setting is not changed.
-        support_attribute (Optional[bool], optional): Whether to support attribute access on objects.
+        support_attribute (bool | None, optional): Whether to support attribute access on objects.
             If None, the setting is not changed.
-        raise_error (Optional[bool], optional): Whether to raise an error when access fails.
+        raise_error (bool | None, optional): Whether to raise an error when access fails.
             If None, the setting is not changed.
-        return_type (Optional[ReturnType], optional): The default return type for access operations.
+        return_type (ReturnType | None, optional): The default return type for access operations.
             If None, the setting is not changed.
     """
     if support_basemodel is not None:
@@ -147,7 +147,7 @@ class SpecIntermediate:
         """Convert a raw specification into a structured format.
 
         Args:
-            raw (Optional[Union[str, int, float, bool, bytes]]): The raw specification input.
+            raw (str | int | float | bool | bytes | None): The raw specification input.
 
         Returns:
             SpecIntermediate: A tuple containing the specification identifier and parameters.
@@ -300,18 +300,18 @@ def access(
 
     Args:
         data (Any): The data to access.
-        source (tuple[Union[int, str], ...]): The path to access within the data.
-        return_type (Optional[ReturnType], optional): The type of access to use.
+        source (tuple[int | str, ...]): The path to access within the data.
+        return_type (ReturnType | None, optional): The type of access to use.
             Default is taken from global settings.
-        support_basemodel (Optional[bool], optional): Whether to support BaseModel access.
+        support_basemodel (bool | None, optional): Whether to support BaseModel access.
             Default is taken from global settings.
-        support_attribute (Optional[bool], optional): Whether to support attribute access on objects.
+        support_attribute (bool | None, optional): Whether to support attribute access on objects.
             Default is taken from global settings.
-        accessers (Optional[list[tuple[type, Callable[[Any, Union[str, int]], tuple[bool, Any]]]]], optional):
+        accessers (list[tuple[type, Callable[[Any, int | str], tuple[bool, Any]]]] | None, optional):
             A custom list of type-accesser pairs to use for accessing data.
             Each accesser is a callable that takes an instance and an index,
             and returns a tuple of success (bool) and value (Any). Default is taken from global settings.
-        raise_error (Optional[bool], optional): Whether to raise an error when access fails.
+        raise_error (bool | None, optional): Whether to raise an error when access fails.
             Default is taken from global settings.
 
     Returns:
@@ -347,17 +347,17 @@ def construct(
     Args:
         data (Any): The data to construct from.
         spec (Any): The structured specification.
-        return_type (Optional[ReturnType], optional): The type of access to use.
+        return_type (ReturnType | None, optional): The type of access to use.
             Default is taken from global settings.
-        support_basemodel (Optional[bool], optional): Whether to support BaseModel access.
+        support_basemodel (bool | None, optional): Whether to support BaseModel access.
             Default is taken from global settings.
-        support_attribute (Optional[bool], optional): Whether to support attribute access on objects.
+        support_attribute (bool | None, optional): Whether to support attribute access on objects.
             Default is taken from global settings.
-        accessers (Optional[list[tuple[type, Callable[[Any, Union[str, int]], tuple[bool, Any]]]]], optional):
+        accessers (list[tuple[type, Callable[[Any, int | str], tuple[bool, Any]]]] | None, optional):
             A custom list of type-accesser pairs to use for accessing data.
             Each accesser is a callable that takes an instance and an index,
             and returns a tuple of success (bool) and value (Any). Default is taken from global settings.
-        raise_error (Optional[bool], optional): Whether to raise an error when access fails.
+        raise_error (bool | None, optional): Whether to raise an error when access fails.
             Default is taken from global settings.
 
     Returns:

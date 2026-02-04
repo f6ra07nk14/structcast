@@ -46,7 +46,7 @@ class PatternResult:
     depth: int = 0
     """Current recursion depth for security checks."""
 
-    start_time: float = field(default_factory=time)
+    start: float = field(default_factory=time)
     """Start time of instantiation for timeout checks."""
 
 
@@ -60,7 +60,7 @@ class BasePattern(BaseModel, ABC):
         """Build the objects from the pattern.
 
         Args:
-            result (Optional[PatternResult]): The current pattern result.
+            result (PatternResult | None): The current pattern result.
 
         Returns:
             PatternResult: The updated pattern result.
@@ -73,7 +73,7 @@ def _validate_pattern_result(
     """Validate pattern result and extract components.
 
     Returns:
-        Tuple of (result_type, patterns, runs, depth, start_time)
+        Tuple of (result_type, patterns, runs, depth, start)
     """
     if res is None:
         return PatternResult, [], [], 0, time()
@@ -81,9 +81,9 @@ def _validate_pattern_result(
     if res.depth >= MAX_INSTANTIATION_DEPTH:
         raise InstantiationError(f"Maximum instantiation depth exceeded: {MAX_INSTANTIATION_DEPTH}")
     # Security check: enforce timeout
-    if (time() - res.start_time) > MAX_INSTANTIATION_TIME:
+    if (time() - res.start) > MAX_INSTANTIATION_TIME:
         raise InstantiationError(f"Maximum instantiation time exceeded: {MAX_INSTANTIATION_TIME} seconds")
-    return type(res), res.patterns, res.runs, res.depth, res.start_time
+    return type(res), res.patterns, res.runs, res.depth, res.start
 
 
 class AddressPattern(BasePattern):
@@ -97,9 +97,9 @@ class AddressPattern(BasePattern):
 
     def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the objects from the pattern."""
-        res_t, ptns, runs, depth, start_time = _validate_pattern_result(result)
+        res_t, ptns, runs, depth, start = _validate_pattern_result(result)
         run = import_from_address(self.address, module_file=self.file)
-        return res_t(patterns=ptns + [self], runs=runs + [run], depth=depth, start_time=start_time)
+        return res_t(patterns=ptns + [self], runs=runs + [run], depth=depth, start=start)
 
 
 class AttributePattern(BasePattern):
@@ -117,7 +117,7 @@ class AttributePattern(BasePattern):
 
     def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the objects from the pattern."""
-        res_t, ptns, runs, depth, start_time = _validate_pattern_result(result)
+        res_t, ptns, runs, depth, start = _validate_pattern_result(result)
         if not runs:
             raise InstantiationError("No object to access attribute from.")
         runs, last = runs[:-1], runs[-1]
@@ -134,7 +134,7 @@ class AttributePattern(BasePattern):
                     f'while accessing "{self.attribute}" on object of type {type(last).__name__} '
                     f"built from previous patterns: {ptns}"
                 raise InstantiationError(msg)
-        return res_t(patterns=ptns + [self], runs=runs + [obj], depth=depth, start_time=start_time)
+        return res_t(patterns=ptns + [self], runs=runs + [obj], depth=depth, start=start)
 
 
 class CallPattern(BasePattern):
@@ -155,13 +155,13 @@ class CallPattern(BasePattern):
 
     def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the objects from the pattern."""
-        res_t, ptns, runs, depth, start_time = _validate_pattern_result(result)
+        res_t, ptns, runs, depth, start = _validate_pattern_result(result)
         if not runs:
             raise InstantiationError("No object to call.")
         runs, last = runs[:-1], runs[-1]
         if callable(last):
-            run = last(**instantiate(self.call, __depth__=depth + 1, __start_time__=start_time))
-            return res_t(patterns=ptns + [self], runs=runs + [run], depth=depth, start_time=start_time)
+            run = last(**instantiate(self.call, __depth__=depth + 1, __start__=start))
+            return res_t(patterns=ptns + [self], runs=runs + [run], depth=depth, start=start)
         msg = f"Object of type {type(last).__name__} built from previous patterns is not callable: {ptns}"
         raise InstantiationError(msg)
 
@@ -174,13 +174,13 @@ class BindPattern(BasePattern):
 
     def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the objects from the pattern."""
-        res_t, ptns, runs, depth, start_time = _validate_pattern_result(result)
+        res_t, ptns, runs, depth, start = _validate_pattern_result(result)
         if not runs:
             raise InstantiationError("No object to bind.")
         runs, last = runs[:-1], runs[-1]
         if callable(last):
-            run = partial(last, **instantiate(self.bind, __depth__=depth + 1, __start_time__=start_time))
-            return res_t(patterns=ptns + [self], runs=runs + [run], depth=depth, start_time=start_time)
+            run = partial(last, **instantiate(self.bind, __depth__=depth + 1, __start__=start))
+            return res_t(patterns=ptns + [self], runs=runs + [run], depth=depth, start=start)
         msg = f"Object of type {type(last).__name__} built from previous patterns is not callable: {ptns}"
         raise InstantiationError(msg)
 
@@ -201,28 +201,28 @@ class ObjectPattern(BasePattern):
 
     def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the runnable from the pattern."""
-        res_t, ptns, runs, depth, start_time = _validate_pattern_result(result)
-        new = res_t(depth=depth + 1, start_time=start_time)
+        res_t, ptns, runs, depth, start = _validate_pattern_result(result)
+        new = res_t(depth=depth + 1, start=start)
         try:
             for ptn in TypeAdapter(list[PatternLike]).validate_python(self.object):
                 new = ptn.build(new)
         except ValidationError as err:
             raise InstantiationError(f"Failed to validate ObjectPattern contents: {err.errors()}") from err
         if len(new.runs) == 1:
-            return res_t(patterns=ptns + [self], runs=runs + new.runs, depth=depth, start_time=start_time)
+            return res_t(patterns=ptns + [self], runs=runs + new.runs, depth=depth, start=start)
         raise InstantiationError(f"ObjectPattern did not result in a single object (got {new.runs}): {new.patterns}")
 
 
 PatternLike: TypeAlias = Union[AddressPattern, AttributePattern, CallPattern, BindPattern, ObjectPattern]
 
 
-def instantiate(cfg: Any, *, __depth__: int = 0, __start_time__: Optional[float] = None) -> Any:
+def instantiate(cfg: Any, *, __depth__: int = 0, __start__: Optional[float] = None) -> Any:
     """Instantiate an object from a configuration.
 
     Args:
         cfg (Any): The configuration to instantiate from.
         __depth__ (int): Internal recursion depth counter. DO NOT set manually.
-        __start_time__ (Optional[float]): Internal start time for timeout. DO NOT set manually.
+        __start__ (float | None): Internal start time for timeout. DO NOT set manually.
 
     Returns:
         Any: The instantiated object.
@@ -231,20 +231,20 @@ def instantiate(cfg: Any, *, __depth__: int = 0, __start_time__: Optional[float]
         InstantiationError: If maximum recursion depth is exceeded or instantiation fails.
     """
     # Initialize start time on first call
-    if __start_time__ is None:
-        __start_time__ = time()
+    if __start__ is None:
+        __start__ = time()
     # Security check: recursion depth
     if __depth__ >= MAX_INSTANTIATION_DEPTH:
         raise InstantiationError(f"Maximum instantiation depth exceeded: {MAX_INSTANTIATION_DEPTH}")
     # Security check: timeout
-    if (time() - __start_time__) > MAX_INSTANTIATION_TIME:
+    if (time() - __start__) > MAX_INSTANTIATION_TIME:
         raise InstantiationError(f"Maximum instantiation time exceeded: {MAX_INSTANTIATION_TIME} seconds")
     # Security check: primitive types that are safe to return as-is
     if isinstance(cfg, (int, float, bool, bytes, Path, type(None))):
         return cfg
     # Try to validate as pattern
     try:
-        res = ObjectPattern.model_validate(cfg).build(PatternResult(depth=__depth__, start_time=__start_time__))
+        res = ObjectPattern.model_validate(cfg).build(PatternResult(depth=__depth__, start=__start__))
         if len(res.runs) == 1:
             return res.runs[0]
         raise InstantiationError(f"Instantiation did not result in a single object (got {res.runs}): {res.patterns}")
@@ -254,7 +254,7 @@ def instantiate(cfg: Any, *, __depth__: int = 0, __start_time__: Optional[float]
     if isinstance(cfg, (str, BaseModel)):
         return cfg
     # Security check: Validate dict/Mapping types explicitly
-    nest_kw: dict[str, Any] = {"__depth__": __depth__ + 1, "__start_time__": __start_time__}
+    nest_kw: dict[str, Any] = {"__depth__": __depth__ + 1, "__start__": __start__}
     if isinstance(cfg, dict):
         return {k: instantiate(v, **nest_kw) for k, v in cfg.items()}
     if isinstance(cfg, Mapping):

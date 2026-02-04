@@ -49,7 +49,7 @@ def check_elements(elements: Optional[Union[Sequence[T], set[T], T]]) -> list[T]
     ['abc', 'def']
 
     Args:
-        elements (Optional[Union[Elements[T], T]]): The elements to check.
+        elements (Sequence[T] | set[T] | T | None): The elements to check.
 
     Returns:
         The checked elements.
@@ -73,9 +73,9 @@ def import_from_address(
 
     Args:
         address (str): The address of the class or function to import, in the form of "module.class" or "class".
-        default_module (Optional[ModuleType]): The default module to use if the module is not specified in the address.
+        default_module (ModuleType | None): The default module to use if the module is not specified in the address.
             Default is None, which means the built-in module will be used.
-        module_file (Optional[PathLike]): Optional path to a module file to load the module from.
+        module_file (PathLike | None): Optional path to a module file to load the module from.
 
     Returns:
         Any: The imported target.

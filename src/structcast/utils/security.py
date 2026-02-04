@@ -96,17 +96,17 @@ def configure_security(
     """Configure security settings for import_from_address.
 
     Args:
-        settings (Optional[SecuritySettings]): A SecuritySettings instance to use.
+        settings (SecuritySettings | None): A SecuritySettings instance to use.
             If None, individual parameters are used.
-        blocked_modules (Optional[set[str]]): Set of module names to block. If None, use default blocked modules.
-        allowed_modules (Optional[dict[str, Optional[set[Optional[str]]]]]):
+        blocked_modules (set[str] | None): Set of module names to block. If None, use default blocked modules.
+        allowed_modules (dict[str, set[str] | None] | None):
             Allowlist of module names and their allowed members. If None, use default allowed modules.
-        dangerous_dunders (Optional[set[str]]): Set of dangerous dunder method names to block. If None, use default.
-        ascii_check (Optional[bool]): Whether to block non-ASCII attribute names. If None, use default.
-        protected_member_check (Optional[bool]): Whether to block protected member access. If None, use default.
-        private_member_check (Optional[bool]): Whether to block private member access. If None, use default.
-        hidden_check (Optional[bool]): Whether to block paths with hidden directories. If None, use default.
-        working_dir_check (Optional[bool]): Whether to ensure relative paths resolve within allowed directories.
+        dangerous_dunders (set[str] | None): Set of dangerous dunder method names to block. If None, use default.
+        ascii_check (bool | None): Whether to block non-ASCII attribute names. If None, use default.
+        protected_member_check (bool | None): Whether to block protected member access. If None, use default.
+        private_member_check (bool | None): Whether to block private member access. If None, use default.
+        hidden_check (bool | None): Whether to block paths with hidden directories. If None, use default.
+        working_dir_check (bool | None): Whether to ensure relative paths resolve within allowed directories.
             If None, use default.
     """
     if settings is None:
@@ -230,11 +230,11 @@ def validate_attribute(
 
     Args:
         target (str): The dotted attribute name to access.
-        protected_member_check (Optional[bool]): Whether to block access to protected members (starting with '_').
+        protected_member_check (bool | None): Whether to block access to protected members (starting with '_').
             Default is taken from global settings.
-        private_member_check (Optional[bool]): Whether to block access to private members (starting with '__').
+        private_member_check (bool | None): Whether to block access to private members (starting with '__').
             Default is taken from global settings.
-        ascii_check (Optional[bool]): Whether to block access to non-ASCII attribute names.
+        ascii_check (bool | None): Whether to block access to non-ASCII attribute names.
             Default is taken from global settings.
 
     Raises:
@@ -263,9 +263,9 @@ def check_path(
 
     Args:
         path (PathLike): The path to check.
-        hidden_check (Optional[bool]): Whether to block paths with hidden directories (starting with '.').
+        hidden_check (bool | None): Whether to block paths with hidden directories (starting with '.').
             Default is taken from global settings.
-        working_dir_check (Optional[bool]): Whether to ensure that relative paths resolve within allowed directories.
+        working_dir_check (bool | None): Whether to ensure that relative paths resolve within allowed directories.
             Default is taken from global settings.
 
     Returns:
@@ -345,18 +345,18 @@ def import_from_address(
 
     Args:
         address (str): The address of the class or function to import, in the form of "module.class" or "class".
-        default_module (Optional[ModuleType]): The default module to use if the module is not specified in the address.
+        default_module (ModuleType | None): The default module to use if the module is not specified in the address.
             Default is None, which means the built-in module will be used.
-        module_file (Optional[PathLike]): Optional path to a module file to load the module from.
-        hidden_check (Optional[bool]): Whether to block paths with hidden directories (starting with '.').
+        module_file (PathLike | None): Optional path to a module file to load the module from.
+        hidden_check (bool | None): Whether to block paths with hidden directories (starting with '.').
             Default is taken from global settings.
-        working_dir_check (Optional[bool]): Whether to ensure that relative paths resolve within allowed directories.
+        working_dir_check (bool | None): Whether to ensure that relative paths resolve within allowed directories.
             Default is taken from global settings.
-        protected_member_check (Optional[bool]): Whether to block access to protected members (starting with '_').
+        protected_member_check (bool | None): Whether to block access to protected members (starting with '_').
             Default is taken from global settings.
-        private_member_check (Optional[bool]): Whether to block access to private members (starting with '__').
+        private_member_check (bool | None): Whether to block access to private members (starting with '__').
             Default is taken from global settings.
-        ascii_check (Optional[bool]): Whether to block access to non-ASCII attribute names.
+        ascii_check (bool | None): Whether to block access to non-ASCII attribute names.
             Default is taken from global settings.
 
     Returns:
@@ -403,9 +403,9 @@ def load_yaml(
 
     Args:
         yaml_file (PathLike): Path to the yaml file.
-        hidden_check (Optional[bool]): Whether to block paths with hidden directories (starting with '.').
+        hidden_check (bool | None): Whether to block paths with hidden directories (starting with '.').
             Default is taken from global settings.
-        working_dir_check (Optional[bool]): Whether to ensure that relative paths resolve within allowed directories.
+        working_dir_check (bool | None): Whether to ensure that relative paths resolve within allowed directories.
             Default is taken from global settings.
 
     Returns:
