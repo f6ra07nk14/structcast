@@ -10,7 +10,18 @@ from logging import getLogger
 from re import findall as re_findall, match as re_match
 from typing import Any, Callable, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    TypeAdapter,
+    ValidationError,
+    field_serializer,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 from typing_extensions import Self
 
 from structcast.core.constants import SPEC_CONSTANT, SPEC_FORMAT, SPEC_SOURCE
@@ -418,15 +429,32 @@ class _Constructor(BaseModel, ABC):
 
     @field_validator("pipe", mode="before")
     @classmethod
-    def validate_pipe(cls, pipe: Any) -> list[ObjectPattern]:
+    def _validate_pipe(cls, pipe: Any) -> list[ObjectPattern]:
         """Validate the pipe field."""
         return check_elements(TypeAdapter(Optional[Union[ObjectPattern, list[ObjectPattern]]]).validate_python(pipe))
 
     @model_validator(mode="after")
-    def validate_constructor(self) -> Self:
+    def _validate_constructor(self) -> Self:
         """Validate the constructor."""
         _, _ = self.spec, self.casting  # Ensure spec and casting are initialized and cached
         return self
+
+    @field_serializer("pipe", mode="wrap")
+    def _serialize_pipe(self, value: list[ObjectPattern], handler: SerializerFunctionWrapHandler) -> list[Any]:
+        """Serialize the pipe field."""
+        res = handler(value)
+        return res[0] if len(res) == 1 else res
+
+    @cached_property
+    def has_construct_kwargs(self) -> bool:
+        """Check if any construction keyword arguments are set."""
+        return (
+            self.return_type is not None
+            or self.support_basemodel is not None
+            or self.support_attribute is not None
+            or self.raise_error is not None
+            or bool(self.pipe)
+        )
 
     @abstractmethod
     def _get_spec(self) -> Any:
@@ -477,13 +505,18 @@ class RawSpec(_Constructor):
 
     @model_validator(mode="before")
     @classmethod
-    def validate_raw(cls, raw: Any) -> Any:
+    def _validate_raw(cls, raw: Any) -> Any:
         """Validate the raw field."""
         if isinstance(raw, RawSpec):
             return raw
         if isinstance(raw, BaseModel):
             raw = raw.model_dump()
         return raw if isinstance(raw, (dict, Mapping)) and _ALIAS_SPEC in raw else {_ALIAS_SPEC: raw}
+
+    @model_serializer(mode="wrap")
+    def _serialize_model(self, handler: SerializerFunctionWrapHandler) -> Any:
+        """Serialize the model."""
+        return handler(self) if self.has_construct_kwargs else self.raw
 
     def _get_spec(self) -> Any:
         return SpecIntermediate.convert_spec(self.raw)
@@ -497,7 +530,7 @@ class ObjectSpec(_Constructor):
 
     @model_validator(mode="before")
     @classmethod
-    def validate_pattern(cls, raw: Any) -> Any:
+    def _validate_pattern(cls, raw: Any) -> Any:
         """Validate the pattern field."""
         if isinstance(raw, ObjectSpec):
             return raw
@@ -510,6 +543,11 @@ class ObjectSpec(_Constructor):
         except ValidationError:
             pass
         return raw if isinstance(raw, (dict, Mapping)) and _ALIAS_SPEC in raw else {_ALIAS_SPEC: raw}
+
+    @model_serializer(mode="wrap")
+    def _serialize_model(self, handler: SerializerFunctionWrapHandler) -> Any:
+        """Serialize the model."""
+        return handler(self) if self.has_construct_kwargs else handler(self.pattern)
 
     def _get_spec(self) -> Any:
         return self.pattern.build().runs[0]
@@ -525,7 +563,7 @@ class FlexSpec(_Constructor):
 
     @model_validator(mode="before")
     @classmethod
-    def validate_structure(cls, raw: Any) -> Any:
+    def _validate_structure(cls, raw: Any) -> Any:
         """Validate the data."""
         if isinstance(raw, FlexSpec):
             return raw
@@ -544,6 +582,11 @@ class FlexSpec(_Constructor):
         if isinstance(raw, (list, tuple)):
             return {_ALIAS_SPEC: [cls.model_validate(v) for v in raw]}
         return {_ALIAS_SPEC: raw}
+
+    @model_serializer(mode="wrap")
+    def _serialize_model(self, handler: SerializerFunctionWrapHandler) -> Any:
+        """Serialize the model."""
+        return handler(self) if self.has_construct_kwargs else handler(self.structure)
 
     def _get_spec(self) -> Any:
         def _get(structure: Any) -> Any:
