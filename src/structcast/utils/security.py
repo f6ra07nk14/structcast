@@ -1,16 +1,19 @@
 """Security-related utilities and settings for structcast."""
 
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import field
+from datetime import date, datetime
 from importlib import import_module
 from importlib.util import module_from_spec, spec_from_file_location
 from inspect import getmembers
 from logging import getLogger
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Callable, Optional, Union
+from typing import IO, Any, Callable, Optional, Union
 
 from ruamel.yaml import YAML
+from typing_extensions import Self
 
 from structcast.utils.constants import DEFAULT_ALLOWED_MODULES, DEFAULT_BLOCKED_MODULES, DEFAULT_DANGEROUS_DUNDERS
 from structcast.utils.dataclasses import dataclass
@@ -78,7 +81,7 @@ class SecuritySettings:
 
 
 @dataclass
-class __YamlManager:
+class _YamlManager:
     """Manager for YAML constructor and representer reloading."""
 
     constructor_reloaded: bool = False
@@ -111,7 +114,7 @@ class __YamlManager:
 
         self.instance.constructor.add_constructor(tag, _from_yaml_fn)
 
-    def load_representer(self, addresses: list[Union[str, type]]) -> None:
+    def load_representer(self, addresses: set[Union[str, type]]) -> Self:
         """Reload the YAML representer if not already reloaded."""
         for addr in addresses:
             if isinstance(addr, str):
@@ -125,12 +128,13 @@ class __YamlManager:
                 validate_import(module_name, target)
                 validate_attribute(f"{module_name}.{target}")
             self.add_representer(tag, cls, to_yaml_fn)
+        return self
 
-    def load_constructor(self) -> None:
+    def load_constructor(self) -> Self:
         """Reload the YAML constructor if not already reloaded."""
         if self.constructor_reloaded:
-            return
-        for module_name, targets in __security_settings.allowed_modules.items():
+            return self
+        for module_name, targets in _security_settings.allowed_modules.items():
             if targets is None:
                 continue
             if None in targets:
@@ -139,15 +143,17 @@ class __YamlManager:
             for target in targets:
                 address = f"{module_name}.{target}"
                 self.add_constructor(f"!{address}", address)
+        self.constructor_reloaded = True
+        return self
 
 
-__allowed_directories: list[Path] = []
+_allowed_directories: list[Path] = []
 """List of registered directories for module searching."""
 
-__security_settings = SecuritySettings()
+_security_settings = SecuritySettings()
 """Security settings instance."""
 
-__yaml_manager = __YamlManager()
+_yaml_manager = _YamlManager()
 """YAML manager instance."""
 
 
@@ -198,15 +204,15 @@ def configure_security(
         if working_dir_check is not None:
             kwargs["working_dir_check"] = working_dir_check
         settings = SecuritySettings(**kwargs)
-    __security_settings.blocked_modules = settings.blocked_modules
-    __security_settings.allowed_modules = settings.allowed_modules
-    __security_settings.dangerous_dunders = settings.dangerous_dunders
-    __security_settings.ascii_check = settings.ascii_check
-    __security_settings.protected_member_check = settings.protected_member_check
-    __security_settings.private_member_check = settings.private_member_check
-    __security_settings.hidden_check = settings.hidden_check
-    __security_settings.working_dir_check = settings.working_dir_check
-    __yaml_manager.reset()
+    _security_settings.blocked_modules = settings.blocked_modules
+    _security_settings.allowed_modules = settings.allowed_modules
+    _security_settings.dangerous_dunders = settings.dangerous_dunders
+    _security_settings.ascii_check = settings.ascii_check
+    _security_settings.protected_member_check = settings.protected_member_check
+    _security_settings.private_member_check = settings.private_member_check
+    _security_settings.hidden_check = settings.hidden_check
+    _security_settings.working_dir_check = settings.working_dir_check
+    _yaml_manager.reset()
 
 
 def register_dir(path: PathLike) -> None:
@@ -220,10 +226,10 @@ def register_dir(path: PathLike) -> None:
     resolved_path = resolve_path(path)
     if resolved_path is None or not resolved_path.is_dir():
         raise ValueError(f"Path is not a valid directory: {path}")
-    if resolved_path in __allowed_directories:
+    if resolved_path in _allowed_directories:
         logger.warning(f"Directory is already registered. Skip registering: {path}")
     else:
-        __allowed_directories.append(resolved_path)
+        _allowed_directories.append(resolved_path)
 
 
 def unregister_dir(path: PathLike) -> None:
@@ -238,7 +244,7 @@ def unregister_dir(path: PathLike) -> None:
     if resolved_path is None or not resolved_path.is_dir():
         raise ValueError(f"Path is not a valid directory: {path}")
     try:
-        __allowed_directories.remove(resolved_path)
+        _allowed_directories.remove(resolved_path)
     except ValueError:
         logger.warning(f"Directory was not registered. Skip unregistering: {path}")
 
@@ -253,12 +259,12 @@ def validate_import(module_name: str, target: str) -> None:
     Raises:
         SecurityError: If the import is blocked by security settings.
     """
-    allowed_members = __security_settings.allowed_modules.get(module_name, set())
+    allowed_members = _security_settings.allowed_modules.get(module_name, set())
     if allowed_members is not None:
         if None in allowed_members or target in allowed_members:
             return
         raise SecurityError(f"Blocked import attempt (not in allowlist): {module_name}.{target}")
-    if any(n and (module_name == n or module_name.startswith(f"{n}.")) for n in __security_settings.blocked_modules):
+    if any(n and (module_name == n or module_name.startswith(f"{n}.")) for n in _security_settings.blocked_modules):
         raise SecurityError(f"Blocked import attempt (blocklisted): {module_name}.{target}")
 
 
@@ -269,18 +275,18 @@ def _validate_attribute(
     private_member_check: Optional[bool] = None,
     ascii_check: Optional[bool] = None,
 ) -> None:
-    ascii_check = __security_settings.ascii_check if ascii_check is None else ascii_check
+    ascii_check = _security_settings.ascii_check if ascii_check is None else ascii_check
     protected_member_check = (
-        __security_settings.protected_member_check if protected_member_check is None else protected_member_check
+        _security_settings.protected_member_check if protected_member_check is None else protected_member_check
     )
     private_member_check = (
-        __security_settings.private_member_check if private_member_check is None else private_member_check
+        _security_settings.private_member_check if private_member_check is None else private_member_check
     )
     if not target.isidentifier() or target != target.strip():
         raise SecurityError(f"Invalid attribute access attempt: {repr(target)}")
     if ascii_check and not target.isascii():
         raise SecurityError(f"Non-ASCII attribute access attempt: {repr(target)}")
-    if target in __security_settings.dangerous_dunders:
+    if target in _security_settings.dangerous_dunders:
         raise SecurityError(f"Dangerous dunder access attempt: {repr(target)}")
     is_private = target.startswith("__")
     is_protected = target.startswith("_") and not is_private
@@ -346,20 +352,20 @@ def check_path(
         FileNotFoundError: If the path does not exist.
         SecurityError: If the path is blocked by security settings.
     """
-    hidden_check = __security_settings.hidden_check if hidden_check is None else hidden_check
-    working_dir_check = __security_settings.working_dir_check if working_dir_check is None else working_dir_check
+    hidden_check = _security_settings.hidden_check if hidden_check is None else hidden_check
+    working_dir_check = _security_settings.working_dir_check if working_dir_check is None else working_dir_check
     if not isinstance(path, Path):
         path = Path(path)
     candidate: Optional[Path] = resolve_path(path)
     if not path.is_absolute():
-        allowed_directories = __allowed_directories.copy()
+        allowed_directories = _allowed_directories.copy()
         while candidate is None and allowed_directories:
             candidate = resolve_path(allowed_directories.pop(0) / path)
     if candidate is None:
         raise FileNotFoundError(f"Path does not exist: {path}")
     if working_dir_check and not (
         (candidate.is_relative_to(Path.home()) and candidate.is_relative_to(Path.cwd()))
-        or any(candidate.is_relative_to(d) for d in __allowed_directories)
+        or any(candidate.is_relative_to(d) for d in _allowed_directories)
     ):
         raise SecurityError(f"Path is outside of allowed directories: {path}")
     if hidden_check and any(p.startswith(".") for p in candidate.parts):
@@ -494,6 +500,25 @@ def load_yaml(
         Loaded yaml file.
     """
     yaml_file = check_path(yaml_file, hidden_check=hidden_check, working_dir_check=working_dir_check)
-    __yaml_manager.load_constructor()
     with open(yaml_file, encoding="utf-8") as fin:
-        return __yaml_manager.instance.load(fin)
+        return _yaml_manager.load_constructor().instance.load(fin)
+
+
+def dump_yaml(data: Any, stream: Union[Path, IO]) -> None:
+    """Dump data to a yaml file.
+
+    Args:
+        data (Any): The data to dump.
+        stream (Path | IO): The file path or file-like object to dump the yaml to.
+    """
+
+    def _find(obj: Any) -> set[Union[str, type]]:
+        if obj is None or isinstance(obj, (str, int, float, bool, bytes, date, datetime)):
+            return set()
+        if isinstance(obj, (dict, Mapping)):
+            return {a for v in obj.values() for a in _find(v)}
+        if isinstance(obj, (list, tuple, set, Sequence)):
+            return {a for v in obj for a in _find(v)}
+        return {type(obj)}
+
+    _yaml_manager.load_representer(_find(data)).instance.dump(data, stream)
