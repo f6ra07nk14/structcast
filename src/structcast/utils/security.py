@@ -13,7 +13,6 @@ from types import ModuleType
 from typing import IO, Any, Callable, Optional, Union
 
 from ruamel.yaml import YAML
-from typing_extensions import Self
 
 from structcast.utils.constants import DEFAULT_ALLOWED_MODULES, DEFAULT_BLOCKED_MODULES, DEFAULT_DANGEROUS_DUNDERS
 from structcast.utils.dataclasses import dataclass
@@ -114,8 +113,9 @@ class _YamlManager:
 
         self.instance.constructor.add_constructor(tag, _from_yaml_fn)
 
-    def load_representer(self, addresses: set[Union[str, type]]) -> Self:
+    def load_representer(self, instance: Optional[YAML], addresses: set[Union[str, type]]) -> "_YamlManager":
         """Reload the YAML representer if not already reloaded."""
+        self_ = self if instance is None else _YamlManager(instance=instance)
         for addr in addresses:
             if isinstance(addr, str):
                 tag: str = f"!{addr}"
@@ -127,13 +127,14 @@ class _YamlManager:
                 to_yaml_fn = getattr(addr, "to_yaml", None)
                 validate_import(module_name, target)
                 validate_attribute(f"{module_name}.{target}")
-            self.add_representer(tag, cls, to_yaml_fn)
-        return self
+            self_.add_representer(tag, cls, to_yaml_fn)
+        return self_
 
-    def load_constructor(self) -> Self:
+    def load_constructor(self, instance: Optional[YAML]) -> "_YamlManager":
         """Reload the YAML constructor if not already reloaded."""
-        if self.constructor_reloaded:
-            return self
+        self_ = self if instance is None else _YamlManager(instance=instance)
+        if self_.constructor_reloaded:
+            return self_
         for module_name, targets in _security_settings.allowed_modules.items():
             if targets is None:
                 continue
@@ -142,9 +143,9 @@ class _YamlManager:
                 targets = {n for n, o in getmembers(module) if isinstance(o, type) and o.__module__ == module_name}
             for target in targets:
                 address = f"{module_name}.{target}"
-                self.add_constructor(f"!{address}", address)
-        self.constructor_reloaded = True
-        return self
+                self_.add_constructor(f"!{address}", address)
+        self_.constructor_reloaded = True
+        return self_
 
 
 _allowed_directories: list[Path] = []
@@ -484,6 +485,7 @@ def import_from_address(
 def load_yaml(
     yaml_file: PathLike,
     *,
+    instance: Optional[YAML] = None,
     hidden_check: Optional[bool] = None,
     working_dir_check: Optional[bool] = None,
 ) -> Any:
@@ -491,6 +493,8 @@ def load_yaml(
 
     Args:
         yaml_file (PathLike): Path to the yaml file.
+        instance (YAML | None): Optional YAML instance to use for loading.
+            If None, a default safe YAML instance is used.
         hidden_check (bool | None): Whether to block paths with hidden directories (starting with '.').
             Default is taken from global settings.
         working_dir_check (bool | None): Whether to ensure that relative paths resolve within allowed directories.
@@ -501,15 +505,17 @@ def load_yaml(
     """
     yaml_file = check_path(yaml_file, hidden_check=hidden_check, working_dir_check=working_dir_check)
     with open(yaml_file, encoding="utf-8") as fin:
-        return _yaml_manager.load_constructor().instance.load(fin)
+        return _yaml_manager.load_constructor(instance).instance.load(fin)
 
 
-def dump_yaml(data: Any, stream: Union[Path, IO]) -> None:
+def dump_yaml(data: Any, stream: Union[Path, IO], *, instance: Optional[YAML] = None) -> None:
     """Dump data to a yaml file.
 
     Args:
         data (Any): The data to dump.
         stream (Path | IO): The file path or file-like object to dump the yaml to.
+        instance (YAML | None): Optional YAML instance to use for dumping.
+            If None, a default safe YAML instance is used.
     """
 
     def _find(obj: Any) -> set[Union[str, type]]:
@@ -521,4 +527,4 @@ def dump_yaml(data: Any, stream: Union[Path, IO]) -> None:
             return {a for v in obj for a in _find(v)}
         return {type(obj)}
 
-    _yaml_manager.load_representer(_find(data)).instance.dump(data, stream)
+    _yaml_manager.load_representer(instance, _find(data)).instance.dump(data, stream)
