@@ -1,10 +1,15 @@
 """Base utility functions for StructCast."""
 
 from collections.abc import Sequence
+from io import StringIO
 from types import ModuleType
 from typing import Any, Optional, TypeVar, Union, cast, overload
 
-from structcast.utils.security import import_from_address as __import_from_address, load_yaml as __load_yaml
+from structcast.utils.security import (
+    dump_yaml as __dump_yaml,
+    import_from_address as __import_from_address,
+    load_yaml as __load_yaml,
+)
 from structcast.utils.types import PathLike
 
 T = TypeVar("T")
@@ -97,3 +102,19 @@ def load_yaml(yaml_file: PathLike) -> Any:
         Loaded yaml file.
     """
     return __load_yaml(yaml_file)
+
+
+def dump_yaml(data: Any) -> str:
+    """Dump data to a yaml string.
+
+    Args:
+        data (Any): The data to dump.
+
+    Returns:
+        str: The dumped yaml string.
+    """
+    str_io = StringIO()
+    __dump_yaml(data, str_io)
+    value = str_io.getvalue()
+    str_io.close()
+    return value

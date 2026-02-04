@@ -508,7 +508,14 @@ def load_yaml(
         return _yaml_manager.load_constructor(instance).instance.load(fin)
 
 
-def dump_yaml(data: Any, stream: Union[Path, IO], *, instance: Optional[YAML] = None) -> None:
+def dump_yaml(
+    data: Any,
+    stream: Union[Path, IO],
+    *,
+    instance: Optional[YAML] = None,
+    hidden_check: Optional[bool] = None,
+    working_dir_check: Optional[bool] = None,
+) -> None:
     """Dump data to a yaml file.
 
     Args:
@@ -516,6 +523,10 @@ def dump_yaml(data: Any, stream: Union[Path, IO], *, instance: Optional[YAML] = 
         stream (Path | IO): The file path or file-like object to dump the yaml to.
         instance (YAML | None): Optional YAML instance to use for dumping.
             If None, a default safe YAML instance is used.
+        hidden_check (bool | None): Whether to block paths with hidden directories (starting with '.').
+            Default is taken from global settings.
+        working_dir_check (bool | None): Whether to ensure that relative paths resolve within allowed directories
+            Default is taken from global settings.
     """
 
     def _find(obj: Any) -> set[Union[str, type]]:
@@ -527,4 +538,6 @@ def dump_yaml(data: Any, stream: Union[Path, IO], *, instance: Optional[YAML] = 
             return {a for v in obj for a in _find(v)}
         return {type(obj)}
 
+    if isinstance(stream, Path):
+        stream = check_path(stream, hidden_check=hidden_check, working_dir_check=working_dir_check)
     _yaml_manager.load_representer(instance, _find(data)).instance.dump(data, stream)
