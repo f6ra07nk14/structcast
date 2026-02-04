@@ -4,10 +4,11 @@ from copy import deepcopy
 from dataclasses import field
 from importlib import import_module
 from importlib.util import module_from_spec, spec_from_file_location
+from inspect import getmembers
 from logging import getLogger
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Optional
+from typing import Any, Callable, Optional, Union
 
 from ruamel.yaml import YAML
 
@@ -76,9 +77,78 @@ class SecuritySettings:
     """Whether to ensure relative paths resolve within allowed directories."""
 
 
+@dataclass
+class __YamlManager:
+    """Manager for YAML constructor and representer reloading."""
+
+    constructor_reloaded: bool = False
+    """Whether the constructor has been reloaded."""
+
+    instance: YAML = field(default_factory=lambda: YAML(typ="safe", pure=True))  # YAML 1.2 support
+    """YAML loader instance."""
+
+    def reset(self) -> None:
+        """Reset the YAML instance to default safe settings."""
+        self.instance = YAML(typ="safe", pure=True)
+        self.constructor_reloaded = False
+
+    def add_representer(self, tag: str, cls: type, to_yaml_fn: Optional[Callable[[Any, Any], Any]]) -> None:
+        """Add a YAML representer for a class."""
+        if to_yaml_fn is None:
+
+            def to_yaml_fn(representer: Any, data: Any) -> Any:
+                return representer.represent_yaml_object(tag, data, cls, flow_style=representer.default_flow_style)
+
+        self.instance.representer.add_representer(cls, to_yaml_fn)
+
+    def add_constructor(self, tag: str, address: str) -> None:
+        def _from_yaml_fn(constructor: Any, node: Any) -> Any:
+            cls = import_from_address(address)
+            cls_from_yaml = getattr(cls, "from_yaml", None)
+            if cls_from_yaml is None:
+                return constructor.construct_yaml_object(node, cls)
+            return cls_from_yaml(constructor, node)
+
+        self.instance.constructor.add_constructor(tag, _from_yaml_fn)
+
+    def load_representer(self, addresses: list[Union[str, type]]) -> None:
+        """Reload the YAML representer if not already reloaded."""
+        for addr in addresses:
+            if isinstance(addr, str):
+                tag: str = f"!{addr}"
+                cls = import_from_address(addr)
+                to_yaml_fn = getattr(cls, "to_yaml", None)
+            else:
+                module_name, target = addr.__module__, addr.__name__
+                tag = getattr(addr, "yaml_tag", f"!{module_name}.{target}")
+                to_yaml_fn = getattr(addr, "to_yaml", None)
+                validate_import(module_name, target)
+                validate_attribute(f"{module_name}.{target}")
+            self.add_representer(tag, cls, to_yaml_fn)
+
+    def load_constructor(self) -> None:
+        """Reload the YAML constructor if not already reloaded."""
+        if self.constructor_reloaded:
+            return
+        for module_name, targets in __security_settings.allowed_modules.items():
+            if targets is None:
+                continue
+            if None in targets:
+                module = import_module(module_name)
+                targets = {n for n, o in getmembers(module) if isinstance(o, type) and o.__module__ == module_name}
+            for target in targets:
+                address = f"{module_name}.{target}"
+                self.add_constructor(f"!{address}", address)
+
+
 __allowed_directories: list[Path] = []
+"""List of registered directories for module searching."""
+
 __security_settings = SecuritySettings()
-"""Global security settings instance."""
+"""Security settings instance."""
+
+__yaml_manager = __YamlManager()
+"""YAML manager instance."""
 
 
 def configure_security(
@@ -136,6 +206,7 @@ def configure_security(
     __security_settings.private_member_check = settings.private_member_check
     __security_settings.hidden_check = settings.hidden_check
     __security_settings.working_dir_check = settings.working_dir_check
+    __yaml_manager.reset()
 
 
 def register_dir(path: PathLike) -> None:
@@ -321,6 +392,21 @@ def __load_module(module_name: str, module_file: Path) -> ModuleType:
     return module
 
 
+def resolve_address(address: str) -> tuple[Optional[str], str]:
+    """Resolve an address into module name and target.
+
+    Args:
+        address (str): The address to resolve, in the form of "module.target" or "target".
+
+    Returns:
+        tuple[Optional[str], str]: A tuple of (module_name, target). If the module name is not specified, returns None.
+    """
+    if "." in address:
+        index = address.rindex(".")
+        return address[:index], address[index + 1 :]
+    return None, address
+
+
 def import_from_address(
     address: str,
     *,
@@ -366,11 +452,7 @@ def import_from_address(
         SecurityError: If the import is blocked by security settings.
         ImportError: If the target cannot be imported.
     """
-    if "." in address:
-        index = address.rindex(".")
-        module_name, target = address[:index], address[index + 1 :]
-    else:
-        module_name, target = None, address
+    module_name, target = resolve_address(address)
     if module_file is not None:
         module_file = check_path(module_file, hidden_check=hidden_check, working_dir_check=working_dir_check)
         module_name = module_name or module_file.stem
@@ -412,5 +494,6 @@ def load_yaml(
         Loaded yaml file.
     """
     yaml_file = check_path(yaml_file, hidden_check=hidden_check, working_dir_check=working_dir_check)
+    __yaml_manager.load_constructor()
     with open(yaml_file, encoding="utf-8") as fin:
-        return YAML(typ="safe", pure=True).load(fin)  # YAML 1.2 support
+        return __yaml_manager.instance.load(fin)
