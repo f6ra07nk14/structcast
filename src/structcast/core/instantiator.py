@@ -101,6 +101,8 @@ class AddressPattern(BasePattern):
     @classmethod
     def _validate_raw(cls, raw: Any) -> Any:
         """Validate the object data."""
+        if isinstance(raw, AddressPattern):
+            return raw
         if isinstance(raw, (list, tuple)) and raw and raw[0] == "_addr_":
             try:
                 if len(raw) == 2:
@@ -163,6 +165,8 @@ class CallPattern(BasePattern):
     @classmethod
     def _validate_raw(cls, raw: Any) -> Any:
         """Validate the call data."""
+        if isinstance(raw, CallPattern):
+            return raw
         if isinstance(raw, str):
             if raw == "_call_":
                 return {"_call_": {}}
@@ -216,6 +220,8 @@ class ObjectPattern(BasePattern):
     @classmethod
     def _validate_raw(cls, raw: Any) -> Any:
         """Validate the object data."""
+        if isinstance(raw, ObjectPattern):
+            return raw
         if isinstance(raw, (list, tuple)) and raw and raw[0] == "_obj_":
             return {"_obj_": raw[1:]}
         return raw
