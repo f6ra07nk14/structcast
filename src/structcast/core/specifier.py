@@ -3,7 +3,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from copy import copy, deepcopy
-from dataclasses import field
 from enum import Enum
 from functools import cached_property
 from logging import getLogger
@@ -50,12 +49,6 @@ class ReturnType(Enum):
 class SpecSettings:
     """Settings for specification conversion and accessors."""
 
-    resolvers: dict[str, tuple[str, Callable[[str], Any]]] = field(default_factory=dict)
-    """Registered resolvers for specification conversion."""
-
-    accessers: list[tuple[type, Callable[[Any, Union[str, int]], tuple[bool, Any]]]] = field(default_factory=list)
-    """Registered accessers for data access."""
-
     support_basemodel: bool = True
     """Whether to support BaseModel access."""
 
@@ -72,6 +65,12 @@ class SpecSettings:
 __spec_settings = SpecSettings()
 """Global specification settings instance."""
 
+__resolvers: dict[str, tuple[str, Callable[[str], Any]]] = {}
+"""Registered resolvers for specification conversion."""
+
+__accessers: list[tuple[type, Callable[[Any, Union[str, int]], tuple[bool, Any]]]] = []
+"""Registered accessers for data access."""
+
 
 def register_resolver(name: str, resolver: Callable[[str], Any]) -> None:
     """Register a resolver for specification conversion.
@@ -83,14 +82,14 @@ def register_resolver(name: str, resolver: Callable[[str], Any]) -> None:
     Raises:
         ValueError: If the resolver name is already registered.
     """
-    if name in __spec_settings.resolvers:
+    if name in __resolvers:
         raise ValueError(f"Resolver '{name}' is already registered.")
-    __spec_settings.resolvers[name] = SPEC_FORMAT.format(resolver=name), resolver
+    __resolvers[name] = SPEC_FORMAT.format(resolver=name), resolver
 
 
 register_resolver("constant", lambda x: x)
 
-SPEC_CONSTANT = __spec_settings.resolvers["constant"][0]
+SPEC_CONSTANT = __resolvers["constant"][0]
 
 
 def register_accesser(data_type: type, accesser: Callable[[Any, Union[str, int]], tuple[bool, Any]]) -> None:
@@ -101,10 +100,11 @@ def register_accesser(data_type: type, accesser: Callable[[Any, Union[str, int]]
         accesser (Callable[[Any, Union[str, int]], tuple[bool, Any]]): The accesser function that takes an instance
             and an index, and returns a tuple of success (bool) and value (Any).
     """
-    __spec_settings.accessers.append((data_type, accesser))
+    __accessers.append((data_type, accesser))
 
 
 def configure_spec(
+    settings: Optional[SpecSettings] = None,
     *,
     support_basemodel: Optional[bool] = None,
     support_attribute: Optional[bool] = None,
@@ -114,6 +114,9 @@ def configure_spec(
     """Configure global specification settings.
 
     Args:
+        settings (SpecSettings | None): An instance of SpecSettings to use for configuration.
+            If provided, individual keyword arguments will be ignored.
+            If None, individual keyword arguments will be used for configuration.
         support_basemodel (bool | None, optional): Whether to support BaseModel access.
             If None, the setting is not changed.
         support_attribute (bool | None, optional): Whether to support attribute access on objects.
@@ -123,14 +126,21 @@ def configure_spec(
         return_type (ReturnType | None, optional): The default return type for access operations.
             If None, the setting is not changed.
     """
-    if support_basemodel is not None:
-        __spec_settings.support_basemodel = support_basemodel
-    if support_attribute is not None:
-        __spec_settings.support_attribute = support_attribute
-    if raise_error is not None:
-        __spec_settings.raise_error = raise_error
-    if return_type is not None:
-        __spec_settings.return_type = return_type
+    if settings is None:
+        kwargs: dict[str, Any] = {}
+        if support_basemodel is not None:
+            kwargs["support_basemodel"] = support_basemodel
+        if support_attribute is not None:
+            kwargs["support_attribute"] = support_attribute
+        if raise_error is not None:
+            kwargs["raise_error"] = raise_error
+        if return_type is not None:
+            kwargs["return_type"] = return_type
+        settings = SpecSettings(**kwargs)
+    __spec_settings.support_basemodel = settings.support_basemodel
+    __spec_settings.support_attribute = settings.support_attribute
+    __spec_settings.raise_error = settings.raise_error
+    __spec_settings.return_type = settings.return_type
 
 
 __FIELD_PATTERN1 = r'(?:[^\f\n\r\t\v."\']+)'
@@ -177,7 +187,7 @@ class SpecIntermediate:
             return cls(identifier=SPEC_CONSTANT, value=raw)
         if not raw:
             return cls(identifier=SPEC_SOURCE, value=())
-        for spec_name, (spec_id, resolver) in __spec_settings.resolvers.items():
+        for spec_name, (spec_id, resolver) in __resolvers.items():
             prefix = f"{spec_name}:"
             if raw.lower().startswith(prefix):
                 return cls(identifier=spec_id, value=resolver(raw[len(prefix) :].strip()))
@@ -342,7 +352,7 @@ def access(
         AccessError: If access fails and raise_error is True.
     """
     return_type = __spec_settings.return_type if return_type is None else return_type
-    accessers = __spec_settings.accessers if accessers is None else accessers
+    accessers = __accessers if accessers is None else accessers
     support_attribute = __spec_settings.support_attribute if support_attribute is None else support_attribute
     support_basemodel = __spec_settings.support_basemodel if support_basemodel is None else support_basemodel
     if support_attribute:
