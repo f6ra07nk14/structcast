@@ -24,7 +24,7 @@ from pydantic import (
 )
 from typing_extensions import Self
 
-from structcast.core.constants import SPEC_CONSTANT, SPEC_FORMAT, SPEC_SOURCE
+from structcast.core.constants import SPEC_FORMAT, SPEC_SOURCE
 from structcast.core.instantiator import ObjectPattern
 from structcast.utils.base import check_elements
 from structcast.utils.dataclasses import dataclass
@@ -76,8 +76,6 @@ class SpecSettings:
 __spec_settings = SpecSettings()
 """Global specification settings instance."""
 
-__spec_settings.resolvers["constant"] = (SPEC_CONSTANT, lambda x: x)  # Default constant resolver
-
 
 def register_resolver(name: str, resolver: Callable[[str], Any]) -> None:
     """Register a resolver for specification conversion.
@@ -92,6 +90,11 @@ def register_resolver(name: str, resolver: Callable[[str], Any]) -> None:
     if name in __spec_settings.resolvers:
         raise ValueError(f"Resolver '{name}' is already registered.")
     __spec_settings.resolvers[name] = SPEC_FORMAT.format(resolver=name), resolver
+
+
+register_resolver("constant", lambda x: x)
+
+SPEC_CONSTANT = __spec_settings.resolvers["constant"][0]
 
 
 def register_accesser(data_type: type, accesser: Callable[[Any, Union[str, int]], tuple[bool, Any]]) -> None:

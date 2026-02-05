@@ -11,6 +11,3 @@ SPEC_FORMAT = "__spec_{resolver}__"
 
 SPEC_SOURCE = SPEC_FORMAT.format(resolver="source")
 """Specification source identifier."""
-
-SPEC_CONSTANT = SPEC_FORMAT.format(resolver="constant")
-"""Specification constant identifier."""
