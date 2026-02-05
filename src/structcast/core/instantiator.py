@@ -320,12 +320,15 @@ def _casting(value: Any, *, pipe: list[Callable[[Any], Any]]) -> Any:
     return value
 
 
+_ALIAS_PIPE = "_pipe_"
+
+
 class WithPipe(BaseModel):
     """Model wrapper that applies a pipe of casting functions after instantiation."""
 
     model_config = ConfigDict(frozen=True, validate_default=True, extra="forbid", serialize_by_alias=True)
 
-    pipe: list[ObjectPattern] = Field(default_factory=list, alias="_pipe_")
+    pipe: list[ObjectPattern] = Field(default_factory=list, alias=_ALIAS_PIPE)
     """List of casting patterns to apply after construction."""
 
     @field_validator("pipe", mode="before")
