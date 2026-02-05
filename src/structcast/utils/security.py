@@ -538,6 +538,10 @@ def dump_yaml(
             return {a for v in obj for a in _find(v)}
         return {type(obj)}
 
+    inst = _yaml_manager.load_representer(instance, _find(data))
     if isinstance(stream, Path):
         stream = check_path(stream, hidden_check=hidden_check, working_dir_check=working_dir_check)
-    _yaml_manager.load_representer(instance, _find(data)).instance.dump(data, stream)
+        with open(stream, "w", encoding="utf-8") as fout:
+            inst.instance.dump(data, fout)
+    else:
+        inst.instance.dump(data, stream)
