@@ -5,28 +5,24 @@ from collections.abc import Mapping
 from copy import copy, deepcopy
 from dataclasses import field
 from enum import Enum
-from functools import cached_property, partial
+from functools import cached_property
 from logging import getLogger
 from re import findall as re_findall, match as re_match
 from typing import Any, Callable, Optional, Union
 
 from pydantic import (
     BaseModel,
-    ConfigDict,
     Field,
     SerializerFunctionWrapHandler,
     TypeAdapter,
     ValidationError,
-    field_serializer,
-    field_validator,
     model_serializer,
     model_validator,
 )
 from typing_extensions import Self
 
 from structcast.core.constants import SPEC_FORMAT, SPEC_SOURCE
-from structcast.core.instantiator import ObjectPattern
-from structcast.utils.base import check_elements
+from structcast.core.instantiator import ObjectPattern, WithPipe
 from structcast.utils.dataclasses import dataclass
 from structcast.utils.security import SecurityError, validate_attribute
 
@@ -421,35 +417,12 @@ def construct(
 _ALIAS_SPEC = "_spec_"
 
 
-def _casting(value: Any, *, pipe: list[Callable[[Any], Any]]) -> Any:
-    for call in pipe:
-        value = call(value)
-    return value
-
-
-class _Constructor(BaseModel, ABC):
-    model_config = ConfigDict(frozen=True, validate_default=True, extra="forbid", serialize_by_alias=True)
-
-    pipe: list[ObjectPattern] = Field(default_factory=list)
-    """List of casting patterns to apply after construction."""
-
-    @field_validator("pipe", mode="before")
-    @classmethod
-    def _validate_pipe(cls, pipe: Any) -> list[ObjectPattern]:
-        """Validate the pipe field."""
-        return check_elements(TypeAdapter(Optional[Union[ObjectPattern, list[ObjectPattern]]]).validate_python(pipe))
-
+class _Constructor(WithPipe, ABC):
     @model_validator(mode="after")
     def _validate_constructor(self) -> Self:
         """Validate the constructor."""
-        _, _ = self.spec, self.casting  # Ensure spec and casting are initialized and cached
+        _ = self.spec  # Ensure spec are initialized and cached
         return self
-
-    @field_serializer("pipe", mode="wrap")
-    def _serialize_pipe(self, value: list[ObjectPattern], handler: SerializerFunctionWrapHandler) -> list[Any]:
-        """Serialize the pipe field."""
-        res = handler(value)
-        return res[0] if len(res) == 1 else res
 
     @abstractmethod
     def _get_spec(self) -> Any:
@@ -458,17 +431,6 @@ class _Constructor(BaseModel, ABC):
     @cached_property
     def spec(self) -> Any:
         return self._get_spec()
-
-    @cached_property
-    def casting(self) -> Callable[[Any], Any]:
-        """Get the casting function."""
-        pipe: list[Callable[[Any], Any]] = []
-        for ind, ptn in enumerate(self.pipe):
-            inst = ptn.build().runs[0]
-            if not callable(inst):
-                raise SpecError(f"Invalid pipe at position {ind} is not callable: {inst}")
-            pipe.append(inst)
-        return partial(_casting, pipe=pipe)
 
     @abstractmethod
     def _construct(self, data: Any) -> Any:
