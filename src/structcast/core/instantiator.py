@@ -21,7 +21,7 @@ from pydantic import (
     model_serializer,
     model_validator,
 )
-from typing_extensions import TypeAlias
+from typing_extensions import Self, TypeAlias
 
 from structcast.core.constants import MAX_INSTANTIATION_DEPTH, MAX_INSTANTIATION_TIME
 from structcast.utils.base import import_from_address
@@ -97,6 +97,20 @@ class AddressPattern(BasePattern):
     file: Optional[FilePath] = Field(None, alias="_file_")
     """Optional path to the module file."""
 
+    @model_validator(mode="before")
+    @classmethod
+    def _validate_raw(cls, raw: Any) -> Any:
+        """Validate the object data."""
+        if isinstance(raw, (list, tuple)) and raw and raw[0] == "_addr_":
+            try:
+                if len(raw) == 2:
+                    return {"_addr_": TypeAdapter(str).validate_python(raw[1])}
+                args = TypeAdapter(tuple[str, Optional[FilePath]]).validate_python(raw[1:])
+                return {"_addr_": args[0], "_file_": args[1]}
+            except ValidationError as err:
+                raise InstantiationError(f"Invalid AddressPattern format: {err.errors()}") from err
+        return raw
+
     def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the objects from the pattern."""
         res_t, ptns, runs, depth, start = _validate_pattern_result(result)
@@ -112,7 +126,7 @@ class AttributePattern(BasePattern):
 
     @field_validator("attribute", mode="after")
     @classmethod
-    def validate_attribute(cls, attribute: str) -> str:
+    def _validate_attribute(cls, attribute: str) -> str:
         """Validate the attribute name."""
         validate_attribute(attribute)
         return attribute
@@ -147,13 +161,13 @@ class CallPattern(BasePattern):
 
     @model_validator(mode="before")
     @classmethod
-    def validate_raw(cls, data: Any) -> Any:
+    def _validate_raw(cls, raw: Any) -> Any:
         """Validate the call data."""
-        if isinstance(data, str):
-            if data == "_call_":
+        if isinstance(raw, str):
+            if raw == "_call_":
                 return {"_call_": {}}
-            raise ValueError(f"Invalid call pattern: {data}")
-        return data
+            raise ValueError(f"Invalid call pattern: {raw}")
+        return raw
 
     @model_serializer(mode="wrap")
     def _serialize_model(self, handler: SerializerFunctionWrapHandler) -> Any:
@@ -200,11 +214,17 @@ class ObjectPattern(BasePattern):
 
     @model_validator(mode="before")
     @classmethod
-    def validate_raw(cls, data: Any) -> Any:
+    def _validate_raw(cls, raw: Any) -> Any:
         """Validate the object data."""
-        if isinstance(data, (list, tuple)) and data and data[0] == "_obj_":
-            return {"_obj_": data[1:]}
-        return data
+        if isinstance(raw, (list, tuple)) and raw and raw[0] == "_obj_":
+            return {"_obj_": raw[1:]}
+        return raw
+
+    @model_validator(mode="after")
+    def _validate_patterns(self) -> Self:
+        """Validate the patterns."""
+        _ = self.patterns
+        return self
 
     @model_serializer(mode="wrap")
     def _serialize_model(self, handler: SerializerFunctionWrapHandler) -> list[Any]:
