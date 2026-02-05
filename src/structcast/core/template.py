@@ -40,14 +40,15 @@ class JinjaSettings:
     lstrip_blocks: bool = True
     """Whether to left-strip blocks in the Jinja template."""
 
-    extensions: list[Union[str, type["Extension"]]] = field(default_factory=lambda: ["jinja2.ext.loopcontrols"])
-    """List of Jinja extensions to enable."""
-
     raise_error: bool = True
     """Whether to raise an error on template rendering failure."""
 
+    extensions: list[Union[str, type["Extension"]]] = field(default_factory=lambda: ["jinja2.ext.loopcontrols"])
+    """List of Jinja extensions to enable."""
+
 
 __jinja_settings = JinjaSettings()
+"""Global settings for Jinja templates."""
 
 
 def get_environment() -> Environment:
@@ -60,39 +61,50 @@ def get_environment() -> Environment:
     )
 
 
-def register_jinja_extension(extension: Union[str, type["Extension"]]) -> None:
-    """Register a Jinja extension.
-
-    Args:
-        extension (str | type[Extension]): The Jinja extension to register.
-    """
-    ext_name = extension if isinstance(extension, str) else extension.__name__
-    if ext_name not in {e if isinstance(e, str) else e.__name__ for e in __jinja_settings.extensions}:
-        __jinja_settings.extensions.append(extension)
-
-
 def configure_jinja(
+    settings: Optional[JinjaSettings] = None,
+    *,
     environment_type: Optional[type[Environment]] = None,
     undefined_type: Optional[type[Undefined]] = None,
     trim_blocks: Optional[bool] = None,
     lstrip_blocks: Optional[bool] = None,
+    extensions: Optional[list[Union[str, type["Extension"]]]] = None,
 ) -> None:
     """Configure the Jinja environment settings.
 
     Args:
+        settings (JinjaSettings | None): An instance of JinjaSettings to use for configuration.
+            If provided, individual keyword arguments will be ignored.
+            If None, individual keyword arguments will be used for configuration.
         environment_type (type[Environment] | None): The type of Jinja environment to use.
+            If None, use default from settings.
         undefined_type (type[Undefined] | None): The type of Jinja undefined to use.
+            If None, use default from settings.
         trim_blocks (bool | None): Whether to trim blocks in the Jinja template.
-        lstrip_blocks (bool | None): Whether to left-strip blocks in the Jinja template
+            If None, use default from settings.
+        lstrip_blocks (bool | None): Whether to left-strip blocks in the Jinja template.
+            If None, use default from settings.
+        extensions (list[Union[str, type[Extension]]] | None): List of Jinja extensions to enable.
+            If None, use default from settings.
     """
-    if environment_type is not None:
-        __jinja_settings.environment_type = environment_type
-    if undefined_type is not None:
-        __jinja_settings.undefined_type = undefined_type
-    if trim_blocks is not None:
-        __jinja_settings.trim_blocks = trim_blocks
-    if lstrip_blocks is not None:
-        __jinja_settings.lstrip_blocks = lstrip_blocks
+    if settings is None:
+        kwargs: dict[str, Any] = {}
+        if environment_type is not None:
+            kwargs["environment_type"] = environment_type
+        if undefined_type is not None:
+            kwargs["undefined_type"] = undefined_type
+        if trim_blocks is not None:
+            kwargs["trim_blocks"] = trim_blocks
+        if lstrip_blocks is not None:
+            kwargs["lstrip_blocks"] = lstrip_blocks
+        if extensions is not None:
+            kwargs["extensions"] = extensions
+        settings = JinjaSettings(**kwargs)
+    __jinja_settings.environment_type = settings.environment_type
+    __jinja_settings.undefined_type = settings.undefined_type
+    __jinja_settings.trim_blocks = settings.trim_blocks
+    __jinja_settings.lstrip_blocks = settings.lstrip_blocks
+    __jinja_settings.extensions = settings.extensions.copy()
 
 
 _ALIAS_JINJA = "_jinja_"
