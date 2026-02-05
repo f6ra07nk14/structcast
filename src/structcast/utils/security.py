@@ -501,7 +501,7 @@ def load_yaml(
             Default is taken from global settings.
 
     Returns:
-        Loaded yaml file.
+        Any: The loaded data from the yaml file.
     """
     yaml_file = check_path(yaml_file, hidden_check=hidden_check, working_dir_check=working_dir_check)
     with open(yaml_file, encoding="utf-8") as fin:
