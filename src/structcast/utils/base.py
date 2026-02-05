@@ -9,6 +9,7 @@ from structcast.utils.security import (
     dump_yaml as __dump_yaml,
     import_from_address as __import_from_address,
     load_yaml as __load_yaml,
+    load_yaml_from_stream as __load_yaml_from_stream,
 )
 from structcast.utils.types import PathLike
 
@@ -104,15 +105,30 @@ def load_yaml(yaml_file: PathLike) -> Any:
     return __load_yaml(yaml_file)
 
 
-def dump_yaml(data: Any) -> str:
-    """Dump data to a yaml string.
+def load_yaml_from_string(yaml_string: str) -> Any:
+    """Load a yaml string.
+
+    Args:
+        yaml_string (str): The yaml string to load.
+
+    Returns:
+        Any: The loaded yaml data.
+    """
+    return __load_yaml_from_stream(yaml_string)
+
+
+def dump_yaml(data: Any, yaml_file: PathLike) -> None:
+    """Dump data to a yaml file.
 
     Args:
         data (Any): The data to dump.
-
-    Returns:
-        str: The dumped yaml string.
+        yaml_file (PathLike): Path to the yaml file.
     """
+    __dump_yaml(data, yaml_file)
+
+
+def dump_yaml_to_string(data: Any) -> str:
+    """Dump data to a yaml formatted string."""
     str_io = StringIO()
     __dump_yaml(data, str_io)
     value = str_io.getvalue()

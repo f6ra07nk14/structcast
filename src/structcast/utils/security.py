@@ -505,12 +505,26 @@ def load_yaml(
     """
     yaml_file = check_path(yaml_file, hidden_check=hidden_check, working_dir_check=working_dir_check)
     with open(yaml_file, encoding="utf-8") as fin:
-        return _yaml_manager.load_constructor(instance).instance.load(fin)
+        return load_yaml_from_stream(fin, instance=instance)
+
+
+def load_yaml_from_stream(stream: Union[str, IO], *, instance: Optional[YAML] = None) -> Any:
+    """Load a yaml string.
+
+    Args:
+        stream (str | IO): The yaml string or file-like object to load.
+        instance (YAML | None): Optional YAML instance to use for loading.
+            If None, a default safe YAML instance is used.
+
+    Returns:
+        Any: The loaded data from the yaml string.
+    """
+    return _yaml_manager.load_constructor(instance).instance.load(stream)
 
 
 def dump_yaml(
     data: Any,
-    stream: Union[Path, IO],
+    stream: Union[PathLike, IO],
     *,
     instance: Optional[YAML] = None,
     hidden_check: Optional[bool] = None,
@@ -539,7 +553,7 @@ def dump_yaml(
         return {type(obj)}
 
     inst = _yaml_manager.load_representer(instance, _find(data))
-    if isinstance(stream, Path):
+    if isinstance(stream, (Path, str)):
         stream = check_path(stream, hidden_check=hidden_check, working_dir_check=working_dir_check)
         with open(stream, "w", encoding="utf-8") as fout:
             inst.instance.dump(data, fout)
