@@ -377,8 +377,6 @@ def construct(
     Raises:
         AccessError: If access fails and raise_error is True.
     """
-    if spec is None or isinstance(spec, (str, int, float, bool, bytes)):
-        return spec
     kwargs: dict[str, Any] = {
         "return_type": return_type,
         "support_basemodel": support_basemodel,
@@ -386,18 +384,24 @@ def construct(
         "accessers": accessers,
         "raise_error": raise_error,
     }
-    if isinstance(spec, SpecIntermediate):
-        if spec.identifier == SPEC_SOURCE:
-            return access(data, spec.value, **kwargs)
-        return spec.value
-    if isinstance(spec, dict):
-        return {k: construct(data, v, **kwargs) for k, v in spec.items()}
-    if isinstance(spec, Mapping):
-        return type(spec)(**{k: construct(data, v, **kwargs) for k, v in spec.items()})
-    if isinstance(spec, (list, tuple)):
-        return type(spec)(construct(data, v, **kwargs) for v in spec)
-    logger.debug(f"Got unsupported type ({type(spec)}) in specification construction: {spec}")
-    return spec
+
+    def _construct(raw: Any, sim: Any) -> Any:
+        if sim is None or isinstance(sim, (str, int, float, bool, bytes)):
+            return sim
+        if isinstance(sim, SpecIntermediate):
+            if sim.identifier == SPEC_SOURCE:
+                return access(raw, sim.value, **kwargs)
+            return sim.value
+        if isinstance(sim, dict):
+            return {k: _construct(raw, v) for k, v in sim.items()}
+        if isinstance(sim, Mapping):
+            return type(sim)(**{k: _construct(raw, v) for k, v in sim.items()})
+        if isinstance(sim, (list, tuple)):
+            return type(sim)(_construct(raw, v) for v in sim)
+        logger.debug(f"Got unsupported type ({type(sim)}) in specification construction: {sim}")
+        return sim
+
+    return _construct(data, spec)
 
 
 _ALIAS_SPEC = "_spec_"
@@ -411,18 +415,6 @@ def _casting(value: Any, *, pipe: list[Callable[[Any], Any]]) -> Any:
 
 class _Constructor(BaseModel, ABC):
     model_config = ConfigDict(frozen=True, validate_default=True, extra="forbid", serialize_by_alias=True)
-
-    return_type: Optional[ReturnType] = None
-    """The type of access to use."""
-
-    support_basemodel: Optional[bool] = None
-    """Whether to support BaseModel."""
-
-    support_attribute: Optional[bool] = None
-    """Whether to support attribute access on objects."""
-
-    raise_error: Optional[bool] = None
-    """Whether to raise an error when picking fails."""
 
     pipe: list[ObjectPattern] = Field(default_factory=list)
     """List of casting patterns to apply after construction."""
@@ -445,17 +437,6 @@ class _Constructor(BaseModel, ABC):
         res = handler(value)
         return res[0] if len(res) == 1 else res
 
-    @cached_property
-    def has_construct_kwargs(self) -> bool:
-        """Check if any construction keyword arguments are set."""
-        return (
-            self.return_type is not None
-            or self.support_basemodel is not None
-            or self.support_attribute is not None
-            or self.raise_error is not None
-            or bool(self.pipe)
-        )
-
     @abstractmethod
     def _get_spec(self) -> Any:
         """Get the specification for construction."""
@@ -475,15 +456,16 @@ class _Constructor(BaseModel, ABC):
             pipe.append(inst)
         return partial(_casting, pipe=pipe)
 
-    @cached_property
-    def construct_kwargs(self) -> dict[str, Any]:
-        """Get the construction keyword arguments."""
-        return {
-            "return_type": self.return_type,
-            "support_basemodel": self.support_basemodel,
-            "support_attribute": self.support_attribute,
-            "raise_error": self.raise_error,
-        }
+    @abstractmethod
+    def _construct(self, data: Any) -> Any:
+        """Construct the value from data based on the specification.
+
+        Args:
+            data (Any): The data to construct from.
+
+        Returns:
+            Any: The constructed value before casting.
+        """
 
     def __call__(self, data: Any) -> Any:
         """Construct the value from data based on the specification.
@@ -494,7 +476,7 @@ class _Constructor(BaseModel, ABC):
         Returns:
             Any: The constructed and casted value.
         """
-        return self.casting(construct(data, self.spec, **self.construct_kwargs))
+        return self.casting(self._construct(data))
 
 
 class RawSpec(_Constructor):
@@ -502,6 +484,18 @@ class RawSpec(_Constructor):
 
     raw: Optional[Union[str, int, float, bool, bytes]] = Field("", alias=_ALIAS_SPEC)
     """The raw specification input."""
+
+    return_type: Optional[ReturnType] = None
+    """The type of access to use."""
+
+    support_basemodel: Optional[bool] = None
+    """Whether to support BaseModel."""
+
+    support_attribute: Optional[bool] = None
+    """Whether to support attribute access on objects."""
+
+    raise_error: Optional[bool] = None
+    """Whether to raise an error when picking fails."""
 
     @model_validator(mode="before")
     @classmethod
@@ -520,6 +514,31 @@ class RawSpec(_Constructor):
 
     def _get_spec(self) -> Any:
         return SpecIntermediate.convert_spec(self.raw)
+
+    @cached_property
+    def has_construct_kwargs(self) -> bool:
+        """Check if any construction keyword arguments are set."""
+        return (
+            self.return_type is not None
+            or self.support_basemodel is not None
+            or self.support_attribute is not None
+            or self.raise_error is not None
+            or bool(self.pipe)
+        )
+
+    @cached_property
+    def construct_kwargs(self) -> dict[str, Any]:
+        """Get the construction keyword arguments."""
+        return {
+            "return_type": self.return_type,
+            "support_basemodel": self.support_basemodel,
+            "support_attribute": self.support_attribute,
+            "raise_error": self.raise_error,
+        }
+
+    def _construct(self, data: Any) -> Any:
+        """Construct the value from data based on the specification."""
+        return construct(data, self.spec, **self.construct_kwargs)
 
 
 class ObjectSpec(_Constructor):
@@ -547,10 +566,14 @@ class ObjectSpec(_Constructor):
     @model_serializer(mode="wrap")
     def _serialize_model(self, handler: SerializerFunctionWrapHandler) -> Any:
         """Serialize the model."""
-        return handler(self) if self.has_construct_kwargs else handler(self.pattern)
+        return handler(self) if self.pipe else handler(self.pattern)
 
     def _get_spec(self) -> Any:
         return self.pattern.build().runs[0]
+
+    def _construct(self, data: Any) -> Any:
+        """Construct the value from data based on the specification."""
+        return self.spec
 
 
 class FlexSpec(_Constructor):
@@ -586,7 +609,7 @@ class FlexSpec(_Constructor):
     @model_serializer(mode="wrap")
     def _serialize_model(self, handler: SerializerFunctionWrapHandler) -> Any:
         """Serialize the model."""
-        return handler(self) if self.has_construct_kwargs else handler(self.structure)
+        return handler(self) if self.pipe else handler(self.structure)
 
     def _get_spec(self) -> Any:
         def _get(structure: Any) -> Any:
@@ -607,14 +630,3 @@ class FlexSpec(_Constructor):
         if isinstance(self.structure, list):
             return [v(data) for v in self.structure]
         return self.structure(data)
-
-    def __call__(self, data: Any) -> Any:
-        """Construct the value from data based on the specification.
-
-        Args:
-            data (Any): The data to construct from.
-
-        Returns:
-            Any: The constructed and casted value.
-        """
-        return self.casting(self._construct(data))
