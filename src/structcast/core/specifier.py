@@ -94,6 +94,17 @@ def register_resolver(name: str, resolver: Callable[[str], Any]) -> None:
     __spec_settings.resolvers[name] = SPEC_FORMAT.format(resolver=name), resolver
 
 
+def register_accesser(data_type: type, accesser: Callable[[Any, Union[str, int]], tuple[bool, Any]]) -> None:
+    """Register an accesser for data access.
+
+    Args:
+        data_type (type): The type of data the accesser can handle.
+        accesser (Callable[[Any, Union[str, int]], tuple[bool, Any]]): The accesser function that takes an instance
+            and an index, and returns a tuple of success (bool) and value (Any).
+    """
+    __spec_settings.accessers.append((data_type, accesser))
+
+
 def configure_spec(
     *,
     support_basemodel: Optional[bool] = None,
