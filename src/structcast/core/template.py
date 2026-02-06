@@ -1,6 +1,5 @@
 """Jinja template support for StructCast."""
 
-from abc import abstractmethod
 from collections.abc import Mapping, Sequence
 from copy import copy
 from dataclasses import field
@@ -164,7 +163,6 @@ class JinjaTemplate(WithPipe):
         """Get the undeclared variables in the Jinja template."""
         return self._template_and_variables[1]
 
-    @abstractmethod
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """Render the Jinja template with the given context."""
         return self.casting(self.template.render(*args, **kwargs))
@@ -244,7 +242,7 @@ def _resolve_jinja_pattern(
         alias, cls = _ALIAS_JINJA, JinjaTemplate
     else:
         return raw, None
-    temp, raw = raw[alias], {k: v for k, v in raw.items() if k != alias}
+    temp, raw = {alias: raw[alias]}, {k: v for k, v in raw.items() if k != alias}
     group_kw = template_kwargs.get(raw.pop(_ALIAS_JINJA_GROUP, None) or default) or {}
     if _ALIAS_JINJA_PIPE in raw:
         temp[_ALIAS_JINJA_PIPE] = raw.pop(_ALIAS_JINJA_PIPE)
@@ -315,14 +313,14 @@ def extend_structure(
         if (time() - __start__) > MAX_RECURSION_TIME:
             raise InstantiationError(f"Maximum recursion time exceeded: {MAX_RECURSION_TIME} seconds")
         dep += 1
-        if isinstance(raw, dict):
+        if type(raw) is dict:
             raw = _resolve_jinja_pattern_in_mapping(raw, template_kwargs=template_kwargs, default=default)
             return {k: _extend(v, dep) for k, v in raw.items()}
-        if isinstance(raw, Mapping):
+        if isinstance(raw, (Mapping)):
             cls: type = type(raw)
             raw = _resolve_jinja_pattern_in_mapping(raw, template_kwargs=template_kwargs, default=default)
             return cls(**{k: _extend(v, dep) for k, v in raw.items()})
-        if isinstance(raw, (list, tuple, Sequence)):
+        if not isinstance(raw, str) and isinstance(raw, (list, tuple, Sequence)):
             cls = type(raw)
             raw = _resolve_jinja_pattern_in_seq(raw, template_kwargs=template_kwargs, default=default)
             return cls(_extend(v, dep) for v in raw)
