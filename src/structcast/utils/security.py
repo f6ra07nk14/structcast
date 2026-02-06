@@ -123,6 +123,7 @@ class _YamlManager:
                 cls = import_from_address(addr)
                 to_yaml_fn = getattr(cls, "to_yaml", None)
             else:
+                cls = addr
                 module_name, target = addr.__module__, addr.__name__
                 tag = getattr(addr, "yaml_tag", f"!{module_name}.{target}")
                 to_yaml_fn = getattr(addr, "to_yaml", None)

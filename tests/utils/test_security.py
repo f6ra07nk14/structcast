@@ -1,5 +1,8 @@
 """Tests for security features in import_from_address."""
 
+from dataclasses import dataclass
+from datetime import date, datetime
+from io import StringIO
 import math
 from pathlib import Path
 from typing import Any
@@ -10,14 +13,33 @@ import pytest
 from structcast.utils.constants import DEFAULT_BLOCKED_MODULES
 from structcast.utils.security import (
     SecurityError,
+    _security_settings,
+    _yaml_manager,
     check_path,
+    configure_security,
+    dump_yaml,
     import_from_address,
     load_yaml,
     register_dir,
     resolve_path,
     unregister_dir,
+    validate_attribute,
 )
 from tests.utils import configure_security_context, temporary_registered_dir
+
+
+@dataclass
+class YAMLTestClass:
+    """Test class for YAML constructor testing."""
+
+    name: str
+    value: int
+
+    @classmethod
+    def from_yaml(cls, constructor: Any, node: Any) -> "YAMLTestClass":
+        """Construct from YAML node."""
+        mapping = constructor.construct_mapping(node, deep=True)
+        return cls(name=mapping["name"], value=mapping["value"])
 
 
 class TestRegisterDir:
@@ -369,3 +391,145 @@ class TestPathResolutionErrors:
         monkeypatch.setattr(Path, "resolve", mock_resolve)
         assert resolve_path(test_path) is None
         assert "Failed to resolve path" in caplog.text
+
+
+# todo
+
+
+def test_configure_security_with_settings_object() -> None:
+    """Test configure_security with SecuritySettings object."""
+    configure_security(
+        blocked_modules={"custom_module"},
+        allowed_modules={"math": {None}},
+        dangerous_dunders={},
+        ascii_check=False,
+        protected_member_check=False,
+        private_member_check=False,
+        hidden_check=False,
+        working_dir_check=False,
+    )
+    _security_settings.blocked_modules = {"custom_module"}
+    _security_settings.allowed_modules = {"math": {None}}
+    _security_settings.ascii_check = False
+    _security_settings.protected_member_check = False
+    _security_settings.private_member_check = False
+    _security_settings.hidden_check = False
+    _security_settings.working_dir_check = False
+    configure_security()
+
+
+class TestDumpYaml:
+    """Test dump_yaml functionality."""
+
+    def test_dump_yaml_to_file(self, tmp_path: Path) -> None:
+        """Test dumping YAML to a file."""
+        yaml_file = tmp_path / "output.yaml"
+        data = {"key": "value", "number": 42, "list": [1, 2, 3]}
+        with temporary_registered_dir(tmp_path):
+            # Create file first
+            yaml_file.touch()
+            dump_yaml(data, yaml_file)
+            assert load_yaml(yaml_file) == data
+
+    def test_dump_yaml_to_stream(self) -> None:
+        """Test dumping YAML to a stream."""
+        stream = StringIO()
+        dump_yaml({"test": "data"}, stream)
+        content = stream.getvalue()
+        assert "test" in content
+        assert "data" in content
+
+    def test_dump_yaml_with_nested_structures(self, tmp_path: Path) -> None:
+        """Test dumping YAML with nested data structures."""
+        yaml_file = tmp_path / "nested.yaml"
+        data = {"nested": {"deep": {"value": 123}}, "list_of_dicts": [{"a": 1}, {"b": 2}]}
+        with temporary_registered_dir(tmp_path):
+            # Create file first
+            yaml_file.touch()
+            dump_yaml(data, yaml_file)
+            assert load_yaml(yaml_file) == data
+
+    def test_dump_yaml_with_various_types(self, tmp_path: Path) -> None:
+        """Test dumping YAML with various data types."""
+        yaml_file = tmp_path / "types.yaml"
+        data = {
+            "string": "hello",
+            "int": 42,
+            "float": 3.14,
+            "bool": True,
+            "none": None,
+            "bytes": b"bytes",
+            "date": date(2024, 1, 1),
+            "datetime": datetime(2024, 1, 1, 12, 0, 0),
+        }
+        with temporary_registered_dir(tmp_path):
+            # Create file first
+            yaml_file.touch()
+            dump_yaml(data, yaml_file)
+            loaded = load_yaml(yaml_file)
+            # Basic types should match
+            assert loaded["string"] == data["string"]
+            assert loaded["int"] == data["int"]
+            assert loaded["bool"] == data["bool"]
+
+
+class TestLoadRepresenterWithAddress:
+    """Test load_representer with different address types."""
+
+    def test_load_representer_with_string_address(self) -> None:
+        """Test load_representer with string address."""
+        with configure_security_context(allowed_modules={"math": {None}}):
+            # Should handle string address
+            result = _yaml_manager.load_representer(None, {"math.sqrt"})
+            assert result is not None
+
+    def test_load_representer_with_type_object(self) -> None:
+        """Test load_representer with type object."""
+        # Should handle type object
+        result = _yaml_manager.load_representer(None, {int})
+        assert result is not None
+
+
+class TestValidateAttributeEdgeCases:
+    """Test _validate_attribute internal function edge cases."""
+
+    def test_validate_attribute_with_non_identifier_after_strip(self) -> None:
+        """Test attribute that looks valid but isn't an identifier."""
+        with pytest.raises(SecurityError, match="Numeric index access"):
+            validate_attribute("123")  # Starts with digit - interpreted as numeric index
+
+    def test_validate_attribute_with_non_ascii_when_disabled(self) -> None:
+        """Test non-ASCII attributes when check is disabled."""
+        # Should not raise when ascii_check is False
+        validate_attribute("café", ascii_check=False)
+
+    def test_validate_attribute_protected_when_disabled(self) -> None:
+        """Test protected member access when check is disabled."""
+        # Should not raise when protected_member_check is False
+        validate_attribute("_protected", protected_member_check=False)
+
+    def test_validate_attribute_private_when_disabled(self) -> None:
+        """Test private member access when check is disabled."""
+        # Should not raise when private_member_check is False
+        validate_attribute("__private", private_member_check=False)
+
+
+def test_load_yaml_with_custom_constructor_via_configure_security(tmp_path: Path) -> None:
+    """Test that load_yaml uses add_constructor for allowed modules via configure_security."""
+    # Configure security to allow our test class
+    test_module = "tests.utils.test_security"
+    with configure_security_context(allowed_modules={test_module: {"YAMLTestClass"}}):
+        yaml_file = tmp_path / "test_constructor.yaml"
+        # Create YAML with custom tag
+        yaml_content = f"""\
+test_obj: !{test_module}.YAMLTestClass
+  name: test_name
+  value: 42
+"""
+        yaml_file.write_text(yaml_content)
+        with temporary_registered_dir(tmp_path):
+            result = load_yaml(yaml_file)
+            # Verify the constructor was used and from_yaml was called
+            assert isinstance(result["test_obj"], YAMLTestClass)
+            assert result["test_obj"].name == "test_name"
+            assert result["test_obj"].value == 42
