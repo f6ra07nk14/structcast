@@ -1,9 +1,9 @@
 """Base utility functions for StructCast."""
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from io import StringIO
 from types import ModuleType
-from typing import Any, Optional, TypeVar, Union, cast, overload
+from typing import Any, Callable, Optional, TypeVar, Union, cast, overload
 
 from structcast.utils.security import (
     dump_yaml as __dump_yaml,
@@ -103,6 +103,27 @@ def load_yaml(yaml_file: PathLike) -> Any:
         Loaded yaml file.
     """
     return __load_yaml(yaml_file)
+
+
+def unroll_call(value: Any, *, call: Callable[..., Any]) -> Any:
+    """Unroll the call if the value is a callable.
+
+    If the value is a dict or a mapping, it will be unpacked as keyword arguments.
+    If the value is a list or a tuple, it will be unpacked as positional arguments.
+    Otherwise, it will be passed as a single argument.
+
+    Args:
+        value: The value to unroll.
+        call: The callable to call with the unrolled value.
+
+    Returns:
+        The result of the call.
+    """
+    if isinstance(value, (dict, Mapping)):
+        return call(**value)
+    if isinstance(value, (list, tuple)):
+        return call(*value)
+    return call(value)
 
 
 def load_yaml_from_string(yaml_string: str) -> Any:
