@@ -16,13 +16,14 @@ WORKDIR /home/$CI_USER
 RUN uv python install $PYTHON_VERSIONS --preview --install-dir /home/$CI_USER/.local/bin
 
 # Install dependencies using uv sync (recommended method)
+# Create the venv in a fixed location that will be reused in CI
 RUN --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=README.md,target=README.md \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --frozen --no-install-project --dev --group tox
 
-# Activate virtual environment
-ENV PATH="/home/$CI_USER/.local/bin:${PATH}"
+# Activate virtual environment and set up PATH to use installed tools
+ENV PATH="/home/$CI_USER/.venv/bin:/home/$CI_USER/.local/bin:${PATH}"
 
 # Set Python path
 ENV PYTHONPATH=/home/$CI_USER/src
