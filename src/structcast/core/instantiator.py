@@ -274,41 +274,46 @@ def instantiate(cfg: Any, *, __depth__: int = 0, __start__: Optional[float] = No
     # Initialize start time on first call
     if __start__ is None:
         __start__ = time()
-    # Security check: recursion depth
-    if __depth__ >= MAX_RECURSION_DEPTH:
-        raise InstantiationError(f"Maximum recursion depth exceeded: {MAX_RECURSION_DEPTH}")
-    # Security check: timeout
-    if (time() - __start__) > MAX_RECURSION_TIME:
-        raise InstantiationError(f"Maximum recursion time exceeded: {MAX_RECURSION_TIME} seconds")
-    # Security check: primitive types that are safe to return as-is
-    if isinstance(cfg, (int, float, bool, bytes, Path, type(None))):
-        return cfg
-    # Try to validate as pattern
-    try:
-        res = ObjectPattern.model_validate(cfg).build(PatternResult(depth=__depth__, start=__start__))
-        if len(res.runs) == 1:
-            return res.runs[0]
-        raise InstantiationError(f"Instantiation did not result in a single object (got {res.runs}): {res.patterns}")
-    except ValidationError:
-        pass
-    # Pass through strings and BaseModel instances
-    if isinstance(cfg, (str, BaseModel)):
-        return cfg
-    # Security check: Validate dict/Mapping types explicitly
-    nest_kw: dict[str, Any] = {"__depth__": __depth__ + 1, "__start__": __start__}
-    if isinstance(cfg, dict):
-        return {k: instantiate(v, **nest_kw) for k, v in cfg.items()}
-    if isinstance(cfg, Mapping):
-        # Use type() to preserve custom Mapping subclasses
-        return type(cfg)(**{k: instantiate(v, **nest_kw) for k, v in cfg.items()})
-    # Security check: Validate list/tuple types explicitly
-    if isinstance(cfg, list):
-        return [instantiate(v, **nest_kw) for v in cfg]
-    if isinstance(cfg, tuple):
-        return tuple(instantiate(v, **nest_kw) for v in cfg)
-    # Log warning for unrecognized types
-    logger.warning(f"Unrecognized configuration type ({type(cfg).__name__}). Returning as is.")
-    return cfg
+
+    def _instantiate(raw: Any, dep: int) -> Any:
+        # Security check: recursion depth
+        if dep >= MAX_RECURSION_DEPTH:
+            raise InstantiationError(f"Maximum recursion depth exceeded: {MAX_RECURSION_DEPTH}")
+        # Security check: timeout
+        if (time() - __start__) > MAX_RECURSION_TIME:
+            raise InstantiationError(f"Maximum recursion time exceeded: {MAX_RECURSION_TIME} seconds")
+        # Security check: primitive types that are safe to return as-is
+        if isinstance(raw, (int, float, bool, bytes, Path, type(None))):
+            return raw
+        # Try to validate as pattern
+        try:
+            res = ObjectPattern.model_validate(raw).build(PatternResult(depth=dep, start=__start__))
+            if len(res.runs) == 1:
+                return res.runs[0]
+            msg = f"Instantiation should result in a single object, but got {len(res.runs)}: {res.patterns}"
+            raise InstantiationError(msg)
+        except ValidationError:
+            pass
+        # Pass through strings and BaseModel instances
+        if isinstance(raw, (str, BaseModel)):
+            return raw
+        # Security check: Validate dict/Mapping types explicitly
+        dep += 1
+        if isinstance(raw, dict):
+            return {k: _instantiate(v, dep) for k, v in raw.items()}
+        if isinstance(raw, Mapping):
+            # Use type() to preserve custom Mapping subclasses
+            return type(raw)(**{k: _instantiate(v, dep) for k, v in raw.items()})
+        # Security check: Validate list/tuple types explicitly
+        if isinstance(raw, list):
+            return [_instantiate(v, dep) for v in raw]
+        if isinstance(raw, tuple):
+            return tuple(_instantiate(v, dep) for v in raw)
+        # Log warning for unrecognized types
+        logger.warning(f"Unrecognized configuration type ({type(raw).__name__}). Returning as is.")
+        return raw
+
+    return _instantiate(cfg, __depth__)
 
 
 def _casting(value: Any, *, pipe: list[Callable[[Any], Any]]) -> Any:
