@@ -9,8 +9,9 @@ from importlib.util import module_from_spec, spec_from_file_location
 from inspect import getmembers
 from logging import getLogger
 from pathlib import Path
+from re import findall as re_findall, match as re_match
 from types import ModuleType
-from typing import IO, Any, Callable, Optional, Union
+from typing import IO, Any, Callable, Optional, Union, cast
 
 from ruamel.yaml import YAML
 
@@ -297,6 +298,40 @@ def _validate_attribute(
         raise SecurityError(f"Protected member access attempt: {repr(target)}")
 
 
+__FIELD_PATTERN1 = r'(?:[^\f\n\r\t\v."\']+)'
+__FIELD_PATTERN2 = r'(?:"(?:\\"|\\\\|[^\f\n\r\t\v"\\])+")'
+__FIELD_PATTERN3 = r"(?:\'(?:\\\\|\\\'|[^\f\n\r\t\v\'\\])+\')"
+__FIELD_PATTERN = rf"(?:{__FIELD_PATTERN1}|{__FIELD_PATTERN2}|{__FIELD_PATTERN3})"
+__GROUP_FIELD = rf"({__FIELD_PATTERN1}|{__FIELD_PATTERN2}|{__FIELD_PATTERN3})"
+__FORMAT_PATTERN = rf"^{__FIELD_PATTERN}(?:\.{__FIELD_PATTERN})*$"
+
+
+def _to_index(value: str) -> Union[str, int]:
+    """Convert a string value to an int or unescaped string."""
+    try:
+        return int(value)
+    except ValueError:
+        if value[0] == '"':
+            return value.strip('"').replace('\\"', '"').replace("\\\\", "\\")
+        if value[0] == "'":
+            return value.strip("'").replace("\\'", "'").replace("\\\\", "\\")
+    return value
+
+
+def split_attribute(path: str) -> tuple[Union[str, int], ...]:
+    """Split an attribute path into its components.
+
+    Args:
+        path (str): The attribute path to split.
+
+    Returns:
+        tuple[Union[str, int], ...]: A tuple of the components of the attribute path.
+    """
+    if re_match(__FORMAT_PATTERN, path):
+        return tuple(_to_index(p) for p in re_findall(__GROUP_FIELD, path))
+    raise ValueError(f"Invalid attribute path format: {path}")
+
+
 def validate_attribute(
     target: str,
     *,
@@ -318,7 +353,10 @@ def validate_attribute(
     Raises:
         SecurityError: If the attribute access is blocked by security settings.
     """
-    attrs = target.split(".")
+    attrs = split_attribute(target)
+    if any(isinstance(a, int) for a in attrs):
+        raise SecurityError(f"Numeric index access is not allowed in attribute paths: {repr(target)}")
+    attrs = cast(tuple[str], attrs)
     for ind, attr in enumerate(attrs):
         try:
             _validate_attribute(

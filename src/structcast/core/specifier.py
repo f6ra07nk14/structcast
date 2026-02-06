@@ -6,7 +6,6 @@ from copy import copy, deepcopy
 from enum import Enum
 from functools import cached_property
 from logging import getLogger
-from re import findall as re_findall, match as re_match
 from typing import Any, Callable, Optional, Union
 
 from pydantic import (
@@ -23,7 +22,7 @@ from typing_extensions import Self
 from structcast.core.constants import SPEC_FORMAT, SPEC_SOURCE
 from structcast.core.instantiator import ObjectPattern, WithPipe
 from structcast.utils.dataclasses import dataclass
-from structcast.utils.security import SecurityError, validate_attribute
+from structcast.utils.security import SecurityError, split_attribute, validate_attribute
 
 logger = getLogger(__name__)
 
@@ -191,9 +190,10 @@ class SpecIntermediate:
             prefix = f"{spec_name}:"
             if raw.lower().startswith(prefix):
                 return cls(identifier=spec_id, value=resolver(raw[len(prefix) :].strip()))
-        if re_match(__FORMAT_PATTERN, raw):
-            return cls(identifier=SPEC_SOURCE, value=tuple(_to(p) for p in re_findall(__GROUP_FIELD, raw)))
-        raise SpecError(f"Invalid specification format: {raw}")
+        try:
+            return cls(identifier=SPEC_SOURCE, value=split_attribute(raw))
+        except ValueError as e:
+            raise SpecError(f"Invalid specification format: {raw}") from e
 
 
 def convert_spec(raw: Any) -> Any:
