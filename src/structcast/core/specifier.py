@@ -142,26 +142,6 @@ def configure_spec(
     __spec_settings.return_type = settings.return_type
 
 
-__FIELD_PATTERN1 = r'(?:[^\f\n\r\t\v."\']+)'
-__FIELD_PATTERN2 = r'(?:"(?:\\"|\\\\|[^\f\n\r\t\v"\\])+")'
-__FIELD_PATTERN3 = r"(?:\'(?:\\\\|\\\'|[^\f\n\r\t\v\'\\])+\')"
-__FIELD_PATTERN = rf"(?:{__FIELD_PATTERN1}|{__FIELD_PATTERN2}|{__FIELD_PATTERN3})"
-__GROUP_FIELD = rf"({__FIELD_PATTERN1}|{__FIELD_PATTERN2}|{__FIELD_PATTERN3})"
-__FORMAT_PATTERN = rf"^{__FIELD_PATTERN}(?:\.{__FIELD_PATTERN})*$"
-
-
-def _to(value: str) -> Union[str, int]:
-    """Convert a string value to an int or unescaped string."""
-    try:
-        return int(value)
-    except ValueError:
-        if value[0] == '"':
-            return value.strip('"').replace('\\"', '"').replace("\\\\", "\\")
-        if value[0] == "'":
-            return value.strip("'").replace("\\'", "'").replace("\\\\", "\\")
-    return value
-
-
 @dataclass(frozen=True)
 class SpecIntermediate:
     """Intermediate representation of a specification."""
