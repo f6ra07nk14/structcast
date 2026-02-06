@@ -1,6 +1,7 @@
 """Tests for Jinja template functionality."""
 
 from collections import OrderedDict
+from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any, Optional, Union
 from unittest.mock import patch
@@ -38,7 +39,7 @@ def configure_jinja_context(
     trim_blocks: Optional[bool] = None,
     lstrip_blocks: Optional[bool] = None,
     extensions: Optional[list[Union[str, type[Extension]]]] = None,
-):
+) -> Generator[None, None, None]:
     """Context manager to temporarily configure Jinja environment."""
     try:
         configure_jinja(
