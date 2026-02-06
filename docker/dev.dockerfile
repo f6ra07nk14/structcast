@@ -8,7 +8,8 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # Define Python versions variable
-ARG PYTHON_VERSIONS="3.8 3.9 3.10 3.11 3.12 3.13 3.14"
+# Note: Python 3.14 is excluded as it's not yet supported by pydantic-core/PyO3
+ARG PYTHON_VERSIONS="3.8 3.9 3.10 3.11 3.12 3.13"
 
 # Set working directory
 WORKDIR /app
