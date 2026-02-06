@@ -407,7 +407,7 @@ def construct(
             return type(sim)(**{k: _construct(raw, v) for k, v in sim.items()})
         if isinstance(sim, (list, tuple)):
             return type(sim)(_construct(raw, v) for v in sim)
-        logger.debug(f"Got unsupported type ({type(sim)}) in specification construction: {sim}")
+        logger.warning(f"Got unsupported type ({type(sim)}) in specification construction: {sim}")
         return sim
 
     return _construct(data, spec)
