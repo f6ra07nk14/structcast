@@ -299,7 +299,7 @@ def instantiate(cfg: Any, *, __depth__: int = 0, __start__: Optional[float] = No
             return raw
         # Security check: Validate dict/Mapping types explicitly
         dep += 1
-        if isinstance(raw, dict):
+        if type(raw) is dict:
             return {k: _instantiate(v, dep) for k, v in raw.items()}
         if isinstance(raw, Mapping):
             # Use type() to preserve custom Mapping subclasses
