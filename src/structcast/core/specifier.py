@@ -197,7 +197,7 @@ def convert_spec(cfg: Any, *, __depth__: int = 0, __start__: Optional[float] = N
         if isinstance(raw, (str, int, float, bool, bytes)) or raw is None:
             return SpecIntermediate.convert_spec(raw)
         dep += 1
-        if isinstance(raw, dict):
+        if type(raw) is dict:
             return {k: _convert(v, dep) for k, v in raw.items()}
         if isinstance(raw, Mapping):
             return type(raw)(**{k: _convert(v, dep) for k, v in raw.items()})
@@ -401,7 +401,7 @@ def construct(
             if sim.identifier == SPEC_SOURCE:
                 return access(raw, sim.value, **kwargs)
             return sim.value
-        if isinstance(sim, dict):
+        if type(sim) is dict:
             return {k: _construct(raw, v) for k, v in sim.items()}
         if isinstance(sim, Mapping):
             return type(sim)(**{k: _construct(raw, v) for k, v in sim.items()})
