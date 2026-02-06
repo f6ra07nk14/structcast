@@ -6,6 +6,7 @@ from copy import copy, deepcopy
 from enum import Enum
 from functools import cached_property
 from logging import getLogger
+from time import time
 from typing import Any, Callable, Optional, Union
 
 from pydantic import (
@@ -173,11 +174,14 @@ class SpecIntermediate:
             raise SpecError(f"Invalid specification format: {raw}") from e
 
 
-def convert_spec(raw: Any) -> Any:
+def convert_spec(cfg: Any, *, __depth__: int = 0, __start__: Optional[float] = None) -> Any:
     """Convert a structured specification input into a resolved format.
 
     Args:
-        raw (Any): The structured specification input.
+        cfg (Any): The structured specification input.
+        __depth__ (int, optional): The current recursion depth. Used internally for recursion control.
+        __start__ (float | None, optional): The start time of the conversion process.
+            Used internally for recursion control.
 
     Returns:
         Any: The resolved specification.
@@ -185,15 +189,23 @@ def convert_spec(raw: Any) -> Any:
     Raises:
         SpecError: If the specification type is unsupported.
     """
-    if isinstance(raw, (str, int, float, bool, bytes)) or raw is None:
-        return SpecIntermediate.convert_spec(raw)
-    if isinstance(raw, dict):
-        return {k: convert_spec(v) for k, v in raw.items()}
-    if isinstance(raw, Mapping):
-        return type(raw)(**{k: convert_spec(v) for k, v in raw.items()})
-    if isinstance(raw, (list, tuple)):
-        return type(raw)(convert_spec(v) for v in raw)
-    raise SpecError(f"Unsupported specification type: {type(raw)}")
+    # Initialize start time on first call
+    if __start__ is None:
+        __start__ = time()
+
+    def _convert(raw: Any, dep: int) -> Any:
+        if isinstance(raw, (str, int, float, bool, bytes)) or raw is None:
+            return SpecIntermediate.convert_spec(raw)
+        dep += 1
+        if isinstance(raw, dict):
+            return {k: _convert(v, dep) for k, v in raw.items()}
+        if isinstance(raw, Mapping):
+            return type(raw)(**{k: _convert(v, dep) for k, v in raw.items()})
+        if isinstance(raw, (list, tuple)):
+            return type(raw)(_convert(v, dep) for v in raw)
+        raise SpecError(f"Unsupported specification type: {type(raw)}")
+
+    return _convert(cfg, __depth__)
 
 
 def _str_index(index: Union[int, str]) -> str:
