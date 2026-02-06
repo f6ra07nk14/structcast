@@ -6,6 +6,7 @@ from copy import copy
 from dataclasses import field
 from functools import cached_property
 from logging import getLogger
+from time import time
 from typing import TYPE_CHECKING, Any, Optional, Union
 
 from jinja2 import Environment, StrictUndefined, Template, Undefined
@@ -14,7 +15,9 @@ from jinja2.sandbox import ImmutableSandboxedEnvironment
 from pydantic import BaseModel, Field, model_validator
 from typing_extensions import Self
 
-from structcast.core.instantiator import ObjectPattern, WithPipe
+from structcast.core.constants import MAX_RECURSION_DEPTH, MAX_RECURSION_TIME
+from structcast.core.exceptions import StructuredExtensionError
+from structcast.core.instantiator import InstantiationError, ObjectPattern, WithPipe
 from structcast.core.specifier import SpecError
 from structcast.utils.dataclasses import dataclass
 
@@ -259,7 +262,7 @@ def _resolve_jinja_pattern_in_mapping(
         return raw
     if isinstance(part, Mapping):
         return {**raw, **part}
-    raise SpecError(f"Jinja template did not produce a mapping: {part}")
+    raise StructuredExtensionError(f"Jinja template did not produce a mapping: {part}")
 
 
 def _resolve_jinja_pattern_in_seq(raw: Sequence, template_kwargs: dict[str, dict[str, Any]], default: str) -> list[Any]:
@@ -272,7 +275,7 @@ def _resolve_jinja_pattern_in_seq(raw: Sequence, template_kwargs: dict[str, dict
             elif isinstance(part, (list, tuple)):
                 result.extend(part)
             else:
-                raise SpecError(f"Jinja template did not produce a sequence: {part}")
+                raise StructuredExtensionError(f"Jinja template did not produce a sequence: {part}")
         else:
             result.append(item)
     return result
@@ -283,6 +286,8 @@ def extend_structure(
     *,
     template_kwargs: Optional[dict[str, dict[str, Any]]] = None,
     default: str = "default",
+    __depth__: int = 0,
+    __start__: Optional[float] = None,
 ) -> Any:
     """Recursively extend a data structure by resolving Jinja templates.
 
@@ -294,21 +299,33 @@ def extend_structure(
 
     Returns:
         Any: The extended data structure with Jinja templates resolved.
+
+    Raises:
+        InstantiationError: If the maximum recursion depth or time is exceeded.
+        StructuredExtensionError: If a Jinja template produces an invalid structure.
+        SpecError: If there is an error in the Jinja template specification.
     """
+    if __start__ is None:
+        __start__ = time()
     template_kwargs = template_kwargs or {}
 
-    def _extend(raw: Any) -> Any:
+    def _extend(raw: Any, dep: int) -> Any:
+        if dep >= MAX_RECURSION_DEPTH:
+            raise InstantiationError(f"Maximum recursion depth exceeded: {MAX_RECURSION_DEPTH}")
+        if (time() - __start__) > MAX_RECURSION_TIME:
+            raise InstantiationError(f"Maximum recursion time exceeded: {MAX_RECURSION_TIME} seconds")
+        dep += 1
         if isinstance(raw, dict):
             raw = _resolve_jinja_pattern_in_mapping(raw, template_kwargs=template_kwargs, default=default)
-            return {k: _extend(v) for k, v in raw.items()}
+            return {k: _extend(v, dep) for k, v in raw.items()}
         if isinstance(raw, Mapping):
             cls: type = type(raw)
             raw = _resolve_jinja_pattern_in_mapping(raw, template_kwargs=template_kwargs, default=default)
-            return cls(**{k: _extend(v) for k, v in raw.items()})
+            return cls(**{k: _extend(v, dep) for k, v in raw.items()})
         if isinstance(raw, (list, tuple)):
             cls = type(raw)
             raw = _resolve_jinja_pattern_in_seq(raw, template_kwargs=template_kwargs, default=default)
-            return cls(_extend(v) for v in raw)
+            return cls(_extend(v, dep) for v in raw)
         return raw
 
-    return _extend(data)
+    return _extend(data, __depth__)
