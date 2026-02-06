@@ -1,7 +1,7 @@
 """Module for specification conversion and resolver registration."""
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from copy import copy, deepcopy
 from enum import Enum
 from functools import cached_property
@@ -201,7 +201,7 @@ def convert_spec(cfg: Any, *, __depth__: int = 0, __start__: Optional[float] = N
             return {k: _convert(v, dep) for k, v in raw.items()}
         if isinstance(raw, Mapping):
             return type(raw)(**{k: _convert(v, dep) for k, v in raw.items()})
-        if isinstance(raw, (list, tuple, Sequence)):
+        if isinstance(raw, (list, tuple)):
             return type(raw)(_convert(v, dep) for v in raw)
         raise SpecError(f"Unsupported specification type: {type(raw)}")
 
@@ -405,7 +405,7 @@ def construct(
             return {k: _construct(raw, v) for k, v in sim.items()}
         if isinstance(sim, Mapping):
             return type(sim)(**{k: _construct(raw, v) for k, v in sim.items()})
-        if isinstance(sim, (list, tuple, Sequence)):
+        if isinstance(sim, (list, tuple)):
             return type(sim)(_construct(raw, v) for v in sim)
         logger.debug(f"Got unsupported type ({type(sim)}) in specification construction: {sim}")
         return sim
@@ -478,14 +478,13 @@ class RawSpec(_Constructor):
         """Validate the raw field."""
         if isinstance(raw, RawSpec):
             return raw
-        if isinstance(raw, BaseModel):
-            raw = raw.model_dump()
         return raw if isinstance(raw, (dict, Mapping)) and _ALIAS_SPEC in raw else {_ALIAS_SPEC: raw}
 
     @model_serializer(mode="wrap")
     def _serialize_model(self, handler: SerializerFunctionWrapHandler) -> Any:
         """Serialize the model."""
-        return handler(self) if self.has_construct_kwargs else self.raw
+        res = handler(self)
+        return res if self.has_construct_kwargs else res[_ALIAS_SPEC]
 
     def _get_spec(self) -> Any:
         return SpecIntermediate.convert_spec(self.raw)
@@ -528,10 +527,6 @@ class ObjectSpec(_Constructor):
         """Validate the pattern field."""
         if isinstance(raw, ObjectSpec):
             return raw
-        if isinstance(raw, ObjectPattern):
-            return {_ALIAS_SPEC: raw}
-        if isinstance(raw, BaseModel):
-            raw = raw.model_dump()
         try:
             return {_ALIAS_SPEC: ObjectPattern.model_validate(raw)}
         except ValidationError:
@@ -541,7 +536,8 @@ class ObjectSpec(_Constructor):
     @model_serializer(mode="wrap")
     def _serialize_model(self, handler: SerializerFunctionWrapHandler) -> Any:
         """Serialize the model."""
-        return handler(self) if self.pipe else handler(self.pattern)
+        res = handler(self)
+        return res if self.pipe else res[_ALIAS_SPEC]
 
     def _get_spec(self) -> Any:
         return self.pattern.build().runs[0]
@@ -554,9 +550,12 @@ class ObjectSpec(_Constructor):
 class FlexSpec(_Constructor):
     """Flexible specification model for constructing values from data."""
 
-    structure: Union[ObjectSpec, dict[str, "FlexSpec"], list["FlexSpec"], RawSpec] = Field(
-        default_factory=RawSpec, alias=_ALIAS_SPEC
-    )
+    structure: Union[
+        RawSpec,
+        ObjectSpec,
+        dict[str, Union[RawSpec, ObjectSpec, "FlexSpec"]],
+        list[Union[RawSpec, ObjectSpec, "FlexSpec"]],
+    ] = Field(default_factory=RawSpec, alias=_ALIAS_SPEC)
     """The specification structure."""
 
     @model_validator(mode="before")
@@ -565,26 +564,23 @@ class FlexSpec(_Constructor):
         """Validate the data."""
         if isinstance(raw, FlexSpec):
             return raw
-        if isinstance(raw, (ObjectSpec, RawSpec)):
-            return {_ALIAS_SPEC: raw}
-        if isinstance(raw, BaseModel):
-            raw = raw.model_dump()
         try:
-            return {_ALIAS_SPEC: TypeAdapter(Union[ObjectSpec, RawSpec]).validate_python(raw)}
+            return {_ALIAS_SPEC: TypeAdapter(Union[RawSpec, ObjectSpec]).validate_python(raw)}
         except ValidationError:
             pass
         if isinstance(raw, (dict, Mapping)):
             if _ALIAS_SPEC in raw:
                 return raw
-            return {_ALIAS_SPEC: {k: cls.model_validate(v) for k, v in raw.items()}}
-        if isinstance(raw, (list, tuple)):
-            return {_ALIAS_SPEC: [cls.model_validate(v) for v in raw]}
+            raw = {k: TypeAdapter(Union[RawSpec, ObjectSpec, FlexSpec]).validate_python(v) for k, v in raw.items()}
+        elif isinstance(raw, (list, tuple)):
+            raw = [TypeAdapter(Union[RawSpec, ObjectSpec, FlexSpec]).validate_python(v) for v in raw]
         return {_ALIAS_SPEC: raw}
 
     @model_serializer(mode="wrap")
     def _serialize_model(self, handler: SerializerFunctionWrapHandler) -> Any:
         """Serialize the model."""
-        return handler(self) if self.pipe else handler(self.structure)
+        res = handler(self)
+        return res if self.pipe else res[_ALIAS_SPEC]
 
     def _get_spec(self) -> Any:
         def _get(structure: Any) -> Any:
