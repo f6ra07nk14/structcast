@@ -1,6 +1,12 @@
 ARG PY_VERSION=3.13
 FROM ghcr.io/astral-sh/uv:python${PY_VERSION}-bookworm-slim
 
+# Install build dependencies for compiling Python packages
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
 # Define Python versions variable
 ARG PYTHON_VERSIONS="3.8 3.9 3.10 3.11 3.12 3.13 3.14"
 
