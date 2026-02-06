@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, Optional, Union
 from jinja2 import Environment, StrictUndefined, Template, Undefined
 from jinja2.meta import find_undeclared_variables
 from jinja2.sandbox import ImmutableSandboxedEnvironment
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, Field, model_validator
 from typing_extensions import Self
 
 from structcast.core.instantiator import ObjectPattern, WithPipe
@@ -116,10 +116,8 @@ _YAML_LOAD_PATTERN = ["_obj_", {"_addr_": "structcast.utils.base.load_yaml_from_
 _JSON_LOAD_PATTERN = ["_obj_", {"_addr_": "json.loads"}]
 
 
-class JinjaTemplate(BaseModel, WithPipe):
+class JinjaTemplate(WithPipe):
     """A wrapper for a Jinja template that can be used as a field in a Pydantic model."""
-
-    model_config = ConfigDict(frozen=True, validate_default=True, extra="forbid", serialize_by_alias=True)
 
     source: str = Field("", alias=_ALIAS_JINJA)
     """The Jinja template source."""
