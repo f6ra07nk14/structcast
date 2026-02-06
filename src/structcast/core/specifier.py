@@ -59,13 +59,13 @@ class SpecSettings:
     """The default return type for access operations."""
 
 
-__spec_settings = SpecSettings()
+_spec_settings = SpecSettings()
 """Global specification settings instance."""
 
-__resolvers: dict[str, tuple[str, Callable[[str], Any]]] = {}
+_resolvers: dict[str, tuple[str, Callable[[str], Any]]] = {}
 """Registered resolvers for specification conversion."""
 
-__accessers: list[tuple[type, Callable[[Any, Union[str, int]], tuple[bool, Any]]]] = []
+_accessers: list[tuple[type, Callable[[Any, Union[str, int]], tuple[bool, Any]]]] = []
 """Registered accessers for data access."""
 
 
@@ -79,14 +79,14 @@ def register_resolver(name: str, resolver: Callable[[str], Any]) -> None:
     Raises:
         ValueError: If the resolver name is already registered.
     """
-    if name in __resolvers:
+    if name in _resolvers:
         raise ValueError(f"Resolver '{name}' is already registered.")
-    __resolvers[name] = SPEC_FORMAT.format(resolver=name), resolver
+    _resolvers[name] = SPEC_FORMAT.format(resolver=name), resolver
 
 
 register_resolver("constant", lambda x: x)
 
-SPEC_CONSTANT = __resolvers["constant"][0]
+SPEC_CONSTANT = _resolvers["constant"][0]
 
 
 def register_accesser(data_type: type, accesser: Callable[[Any, Union[str, int]], tuple[bool, Any]]) -> None:
@@ -97,7 +97,7 @@ def register_accesser(data_type: type, accesser: Callable[[Any, Union[str, int]]
         accesser (Callable[[Any, Union[str, int]], tuple[bool, Any]]): The accesser function that takes an instance
             and an index, and returns a tuple of success (bool) and value (Any).
     """
-    __accessers.append((data_type, accesser))
+    _accessers.append((data_type, accesser))
 
 
 def configure_spec(
@@ -134,10 +134,10 @@ def configure_spec(
         if return_type is not None:
             kwargs["return_type"] = return_type
         settings = SpecSettings(**kwargs)
-    __spec_settings.support_basemodel = settings.support_basemodel
-    __spec_settings.support_attribute = settings.support_attribute
-    __spec_settings.raise_error = settings.raise_error
-    __spec_settings.return_type = settings.return_type
+    _spec_settings.support_basemodel = settings.support_basemodel
+    _spec_settings.support_attribute = settings.support_attribute
+    _spec_settings.raise_error = settings.raise_error
+    _spec_settings.return_type = settings.return_type
 
 
 @dataclass(frozen=True)
@@ -164,7 +164,7 @@ class SpecIntermediate:
             return cls(identifier=SPEC_CONSTANT, value=raw)
         if not raw:
             return cls(identifier=SPEC_SOURCE, value=())
-        for spec_name, (spec_id, resolver) in __resolvers.items():
+        for spec_name, (spec_id, resolver) in _resolvers.items():
             prefix = f"{spec_name}:"
             if raw.lower().startswith(prefix):
                 return cls(identifier=spec_id, value=resolver(raw[len(prefix) :].strip()))
@@ -340,15 +340,15 @@ def access(
     Raises:
         AccessError: If access fails and raise_error is True.
     """
-    return_type = __spec_settings.return_type if return_type is None else return_type
-    accessers = __accessers if accessers is None else accessers
-    support_attribute = __spec_settings.support_attribute if support_attribute is None else support_attribute
-    support_basemodel = __spec_settings.support_basemodel if support_basemodel is None else support_basemodel
+    return_type = _spec_settings.return_type if return_type is None else return_type
+    accessers = _accessers if accessers is None else accessers
+    support_attribute = _spec_settings.support_attribute if support_attribute is None else support_attribute
+    support_basemodel = _spec_settings.support_basemodel if support_basemodel is None else support_basemodel
     if support_attribute:
         accessers = [(object, _access_attribute)] + accessers
     if support_basemodel:
         accessers = [(BaseModel, _access_basemodel)] + accessers
-    raise_error = __spec_settings.raise_error if raise_error is None else raise_error
+    raise_error = _spec_settings.raise_error if raise_error is None else raise_error
     return _access_default(data, source, return_type, accessers, raise_error)
 
 
