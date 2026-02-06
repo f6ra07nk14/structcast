@@ -10,13 +10,13 @@ from unittest.mock import patch
 from pydantic import ValidationError
 import pytest
 
-from structcast.core.constants import MAX_INSTANTIATION_DEPTH
+from structcast.core.constants import MAX_RECURSION_DEPTH
+from structcast.core.exceptions import InstantiationError, SpecError
 from structcast.core.instantiator import (
     AddressPattern,
     AttributePattern,
     BindPattern,
     CallPattern,
-    InstantiationError,
     ObjectPattern,
     PatternResult,
     instantiate,
@@ -85,7 +85,7 @@ class TestPatternSchemas:
 
     def test_call_pattern_invalid_string(self) -> None:
         """Test CallPattern rejects invalid string."""
-        with pytest.raises(ValidationError):
+        with pytest.raises(SpecError, match="Invalid call pattern: invalid"):
             CallPattern.model_validate("invalid")
 
     def test_bind_pattern_valid(self) -> None:
@@ -252,7 +252,7 @@ class TestPatternBuild:
 
     def test_object_pattern_build_invalid_content(self) -> None:
         """Test ObjectPattern.build fails with invalid content."""
-        with pytest.raises(InstantiationError, match="Failed to validate"):
+        with pytest.raises(SpecError, match="Failed to validate"):
             ObjectPattern.model_validate({"_obj_": [{"invalid": "pattern"}]}).build()
 
     def test_pattern_result_immutability(self) -> None:
@@ -474,27 +474,27 @@ class TestRecursionDepthProtection:
         """Test that deeply nested configurations are blocked."""
         # Create a deeply nested configuration
         config: dict[str, Any] = {"_obj_": ["int"]}
-        for _ in range(MAX_INSTANTIATION_DEPTH):  # Exceed MAX_INSTANTIATION_DEPTH (100)
+        for _ in range(MAX_RECURSION_DEPTH):  # Exceed MAX_RECURSION_DEPTH (100)
             config = {"_obj_": [{"_addr_": "dict"}, {"_call_": {"value": config}}]}
-        with pytest.raises(InstantiationError, match="Maximum instantiation depth.*exceeded"):
+        with pytest.raises(InstantiationError, match="Maximum recursion depth exceeded"):
             instantiate(config)
 
     def test_recursive_dict_structure(self) -> None:
         """Test protection against recursive dictionary structures."""
         # Create nested dicts with object patterns
         config: dict[str, Any] = {"_obj_": [{"_addr_": "dict"}, {"_call_": {"value": "test"}}]}
-        for i in range(MAX_INSTANTIATION_DEPTH):
+        for i in range(MAX_RECURSION_DEPTH):
             config = {"_obj_": [{"_addr_": "dict"}, {"_call_": {f"level_{i}": config}}]}
         # This should trigger depth protection
-        with pytest.raises(InstantiationError, match="Maximum instantiation depth.*exceeded"):
+        with pytest.raises(InstantiationError, match="Maximum recursion depth exceeded"):
             instantiate(config)
 
     def test_recursive_list_structure(self) -> None:
         """Test protection against recursive list structures."""
         config: list[Any] = [1, 2, 3]
-        for _ in range(MAX_INSTANTIATION_DEPTH):
+        for _ in range(MAX_RECURSION_DEPTH):
             config = [config]
-        with pytest.raises(InstantiationError, match="Maximum instantiation depth.*exceeded"):
+        with pytest.raises(InstantiationError, match="Maximum recursion depth.*exceeded"):
             instantiate(config)
 
 
@@ -571,13 +571,13 @@ class TestTimeoutProtection:
         """Test that instantiate enforces timeout limit."""
         # Create a configuration that will take longer than allowed by mocking time to simulate elapsed time
         with patch("structcast.core.instantiator.time", side_effect=MockTime(2, time.time)):
-            with pytest.raises(InstantiationError, match="Maximum instantiation time exceeded"):
+            with pytest.raises(InstantiationError, match="Maximum recursion time exceeded"):
                 instantiate({"a": 1, "b": 2, "c": 3})
 
     def test_instantiate_timeout_propagates_through_nested_calls(self) -> None:
         """Test that timeout is checked in nested instantiation."""
         with patch("structcast.core.instantiator.time", side_effect=MockTime(3, time.time)):
-            with pytest.raises(InstantiationError, match="Maximum instantiation time exceeded"):
+            with pytest.raises(InstantiationError, match="Maximum recursion time exceeded"):
                 instantiate({"outer": {"inner": {"deep": {"value": 42}}}})
 
 

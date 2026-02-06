@@ -24,16 +24,13 @@ from pydantic import (
 )
 from typing_extensions import Self, TypeAlias
 
-from structcast.core.constants import MAX_INSTANTIATION_DEPTH, MAX_INSTANTIATION_TIME
+from structcast.core.constants import MAX_RECURSION_DEPTH, MAX_RECURSION_TIME
+from structcast.core.exceptions import InstantiationError, SpecError
 from structcast.utils.base import check_elements, import_from_address
 from structcast.utils.dataclasses import dataclass
 from structcast.utils.security import validate_attribute
 
 logger = getLogger(__name__)
-
-
-class InstantiationError(Exception):
-    """Exception raised for errors during instantiation."""
 
 
 @dataclass(frozen=True)
@@ -81,11 +78,11 @@ def _validate_pattern_result(
     if res is None:
         return PatternResult, [], [], 0, time()
     # Security check: enforce depth limit
-    if res.depth >= MAX_INSTANTIATION_DEPTH:
-        raise InstantiationError(f"Maximum instantiation depth exceeded: {MAX_INSTANTIATION_DEPTH}")
+    if res.depth >= MAX_RECURSION_DEPTH:
+        raise InstantiationError(f"Maximum recursion depth exceeded: {MAX_RECURSION_DEPTH}")
     # Security check: enforce timeout
-    if (time() - res.start) > MAX_INSTANTIATION_TIME:
-        raise InstantiationError(f"Maximum instantiation time exceeded: {MAX_INSTANTIATION_TIME} seconds")
+    if (time() - res.start) > MAX_RECURSION_TIME:
+        raise InstantiationError(f"Maximum recursion time exceeded: {MAX_RECURSION_TIME} seconds")
     return type(res), res.patterns, res.runs, res.depth, res.start
 
 
@@ -111,7 +108,7 @@ class AddressPattern(BasePattern):
                 args = TypeAdapter(tuple[str, Optional[FilePath]]).validate_python(raw[1:])
                 return {"_addr_": args[0], "_file_": args[1]}
             except ValidationError as err:
-                raise InstantiationError(f"Invalid AddressPattern format: {err.errors()}") from err
+                raise SpecError(f"Invalid AddressPattern format: {err.errors()}") from err
         return raw
 
     def build(self, result: Optional[PatternResult] = None) -> PatternResult:
@@ -171,7 +168,7 @@ class CallPattern(BasePattern):
         if isinstance(raw, str):
             if raw == "_call_":
                 return {"_call_": {}}
-            raise ValueError(f"Invalid call pattern: {raw}")
+            raise SpecError(f"Invalid call pattern: {raw}")
         return raw
 
     @model_serializer(mode="wrap")
@@ -244,7 +241,7 @@ class ObjectPattern(BasePattern):
         try:
             return TypeAdapter(list[PatternLike]).validate_python(self.object)
         except ValidationError as err:
-            raise InstantiationError(f"Failed to validate ObjectPattern contents: {err.errors()}") from err
+            raise SpecError(f"Failed to validate ObjectPattern contents: {err.errors()}") from err
 
     def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the runnable from the pattern."""
@@ -278,11 +275,11 @@ def instantiate(cfg: Any, *, __depth__: int = 0, __start__: Optional[float] = No
     if __start__ is None:
         __start__ = time()
     # Security check: recursion depth
-    if __depth__ >= MAX_INSTANTIATION_DEPTH:
-        raise InstantiationError(f"Maximum instantiation depth exceeded: {MAX_INSTANTIATION_DEPTH}")
+    if __depth__ >= MAX_RECURSION_DEPTH:
+        raise InstantiationError(f"Maximum recursion depth exceeded: {MAX_RECURSION_DEPTH}")
     # Security check: timeout
-    if (time() - __start__) > MAX_INSTANTIATION_TIME:
-        raise InstantiationError(f"Maximum instantiation time exceeded: {MAX_INSTANTIATION_TIME} seconds")
+    if (time() - __start__) > MAX_RECURSION_TIME:
+        raise InstantiationError(f"Maximum recursion time exceeded: {MAX_RECURSION_TIME} seconds")
     # Security check: primitive types that are safe to return as-is
     if isinstance(cfg, (int, float, bool, bytes, Path, type(None))):
         return cfg
@@ -356,6 +353,6 @@ class WithPipe(BaseModel):
         for ind, ptn in enumerate(self.pipe):
             inst = ptn.build().runs[0]
             if not callable(inst):
-                raise InstantiationError(f"Invalid pipe at position {ind} is not callable: {inst}")
+                raise SpecError(f"Invalid pipe at position {ind} is not callable: {inst}")
             pipe.append(inst)
         return partial(_casting, pipe=pipe)

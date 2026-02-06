@@ -20,15 +20,12 @@ from pydantic import (
 from typing_extensions import Self
 
 from structcast.core.constants import SPEC_FORMAT, SPEC_SOURCE
+from structcast.core.exceptions import SpecError
 from structcast.core.instantiator import ObjectPattern, WithPipe
 from structcast.utils.dataclasses import dataclass
 from structcast.utils.security import SecurityError, split_attribute, validate_attribute
 
 logger = getLogger(__name__)
-
-
-class SpecError(Exception):
-    """Exception raised for specification errors."""
 
 
 class ReturnType(Enum):
