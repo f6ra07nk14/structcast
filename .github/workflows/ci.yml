@@ -179,6 +179,7 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user root
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -187,7 +188,7 @@ jobs:
         run: |
           echo "=== Running all tox environments ==="
           export PYTHONPATH="$(pwd)/src"
-          uv run tox run-parallel --parallel all
+          tox run-parallel --parallel all
 
   # Cleanup Job: Delete Docker images for feature branches after successful PR merge
   cleanup-images:
