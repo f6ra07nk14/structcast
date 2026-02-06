@@ -504,7 +504,7 @@ class _Constructor(WithPipe, ABC):
 
 
 class RawSpec(_Constructor):
-    """Raw specification model for constructing values from data."""
+    """Raw specification for constructing values from data based on a raw specification input."""
 
     raw: Optional[Union[str, int, float, bool, bytes]] = Field("", alias=_ALIAS_SPEC)
     """The raw specification input."""
@@ -565,7 +565,7 @@ class RawSpec(_Constructor):
 
 
 class ObjectSpec(_Constructor):
-    """Object specification model for constructing values from data."""
+    """Object specification for constructing values from data based on an object pattern."""
 
     pattern: ObjectPattern = Field(default_factory=ObjectPattern, alias=_ALIAS_SPEC)
     """The object pattern specification."""
@@ -597,7 +597,7 @@ class ObjectSpec(_Constructor):
 
 
 class FlexSpec(_Constructor):
-    """Flexible specification model for constructing values from data."""
+    """Flexible specification that can handle various specification structures for constructing values from data."""
 
     structure: Union[
         RawSpec,
