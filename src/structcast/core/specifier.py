@@ -89,8 +89,10 @@ def register_resolver(name: str, resolver: Callable[[str], Any]) -> None:
 
 
 register_resolver("constant", lambda x: x)
+register_resolver("skip", lambda _: SPEC_FORMAT.format(resolver="skip"))
 
 SPEC_CONSTANT = _resolvers["constant"][0]
+SPEC_SKIP = _resolvers["skip"][0]
 
 
 def register_accesser(data_type: type, accesser: Callable[[Any, Union[str, int]], tuple[bool, Any]]) -> None:
@@ -405,12 +407,20 @@ def construct(
             if sim.identifier == SPEC_SOURCE:
                 return access(raw, sim.value, **kwargs)
             return sim.value
-        if type(sim) is dict:
-            return {k: _construct(raw, v) for k, v in sim.items()}
-        if isinstance(sim, Mapping):
-            return type(sim)(**{k: _construct(raw, v) for k, v in sim.items()})
+        if isinstance(sim, (dict, Mapping)):
+            res_d = {}
+            for key, value in sim.items():
+                tmp = _construct(raw, value)
+                if tmp != SPEC_SKIP:
+                    res_d[key] = tmp
+            return res_d if type(sim) is dict else type(sim)(**res_d)
         if isinstance(sim, (list, tuple)):
-            return type(sim)(_construct(raw, v) for v in sim)
+            res_l = []
+            for value in sim:
+                tmp = _construct(raw, value)
+                if tmp != SPEC_SKIP:
+                    res_l.append(tmp)
+            return res_l if type(sim) is list else type(sim)(res_l)
         logger.warning(f"Got unsupported type ({type(sim)}) in specification construction: {sim}")
         return sim
 
@@ -646,7 +656,17 @@ class FlexSpec(_Constructor):
 
     def _construct(self, data: Any) -> Any:
         if isinstance(self.structure, dict):
-            return {k: v(data) for k, v in self.structure.items()}
+            res_d = {}
+            for key, value in self.structure.items():
+                tmp = value(data)
+                if tmp != SPEC_SKIP:
+                    res_d[key] = tmp
+            return res_d
         if isinstance(self.structure, list):
-            return [v(data) for v in self.structure]
+            res_l = []
+            for value in self.structure:
+                tmp = value(data)
+                if tmp != SPEC_SKIP:
+                    res_l.append(tmp)
+            return res_l
         return self.structure(data)
