@@ -1,7 +1,11 @@
 """Tests for specifier module."""
 
-from typing import Any
+from collections import OrderedDict
+from collections.abc import Generator
+from contextlib import contextmanager
+from typing import Any, Optional, Union
 
+from pydantic import BaseModel
 import pytest
 
 from structcast.core.constants import SPEC_SOURCE
@@ -15,8 +19,11 @@ from structcast.core.specifier import (
     ReturnType,
     SpecIntermediate,
     access,
+    configure_spec,
     construct,
     convert_spec,
+    register_accesser,
+    register_resolver,
 )
 
 
@@ -32,7 +39,9 @@ from structcast.core.specifier import (
         ('a."b \\"0".c.1', SPEC_SOURCE, ("a", 'b "0', "c", 1)),
         ("a.'b \\\\\"0'.c.1", SPEC_SOURCE, ("a", 'b \\"0', "c", 1)),
         ("constant: abc", SPEC_CONSTANT, "abc"),
+        ("CONSTANT: xyz", SPEC_CONSTANT, "xyz"),  # Test case-insensitive
         (123, SPEC_CONSTANT, 123),
+        ("", SPEC_SOURCE, ()),  # Empty string
     ],
 )
 def test_convert_spec(raw: str, identifier: str, value: Any) -> None:
@@ -53,6 +62,12 @@ def test_convert_spec_nested() -> None:
     assert convert_spec({"a": [pattern, pattern], "b": pattern}) == {"a": [result, result], "b": result}
     with pytest.raises(SpecError, match="Unsupported specification type"):
         convert_spec([{pattern}])
+
+
+def test_convert_spec_invalid_format() -> None:
+    """Test convert_spec with invalid specification format."""
+    with pytest.raises(SpecError, match="Invalid specification format"):
+        SpecIntermediate.convert_spec('a."unclosed')
 
 
 def test_access() -> None:
@@ -252,6 +267,33 @@ class TestConstruct:
         assert isinstance(result, tuple)
         assert result == (1, 2)
 
+    def test_construct_with_unsupported_spec_type(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Test construct with unsupported spec type logs debug message."""
+
+        # Create a custom object that's not a supported spec type
+        class CustomSpec:
+            pass
+
+        custom = CustomSpec()
+        assert construct({"a": 1}, custom) is custom
+        assert "Got unsupported type" in caplog.text
+
+    def test_construct_with_custom_mapping(self) -> None:
+        """Test construct with custom Mapping type in spec."""
+
+        class CustomDict(dict):
+            pass
+
+        spec = CustomDict(
+            {
+                "x": SpecIntermediate(identifier=SPEC_SOURCE, value=("a",)),
+                "y": SpecIntermediate(identifier=SPEC_SOURCE, value=("b",)),
+            }
+        )
+        result = construct({"a": 1, "b": 2}, spec)
+        assert isinstance(result, CustomDict)
+        assert result == {"x": 1, "y": 2}
+
 
 class TestRawSpec:
     """Tests for RawSpec class."""
@@ -355,7 +397,10 @@ class TestRawSpec:
 
     def test_rawspec_validation_from_rawspec(self) -> None:
         """Test RawSpec validation from another RawSpec instance."""
-        assert RawSpec.model_validate(RawSpec.model_validate("a.b.c")).raw == "a.b.c"
+        spec1 = RawSpec.model_validate("a.b.c")
+        spec2 = RawSpec.model_validate(spec1)
+        assert spec2.raw == "a.b.c"
+        assert spec1 is spec2  # Should return the same instance
 
     def test_rawspec_complex_path(self) -> None:
         """Test RawSpec with complex path containing spaces and quotes."""
@@ -420,7 +465,7 @@ class TestObjectSpec:
         """Test ObjectSpec validation from another ObjectSpec instance."""
         spec1 = ObjectSpec.model_validate({"_obj_": [{"_addr_": "list"}]})
         spec2 = ObjectSpec.model_validate(spec1)
-        assert spec2.pattern == spec1.pattern
+        assert spec1 is spec2  # Should return the same instance
 
     def test_objectspec_with_attribute_pattern(self) -> None:
         """Test ObjectSpec with attribute access pattern."""
@@ -563,9 +608,9 @@ class TestFlexSpec:
 
     def test_flexspec_validation_from_flexspec(self) -> None:
         """Test FlexSpec validation from another FlexSpec instance."""
-        spec = FlexSpec.model_validate(FlexSpec.model_validate("a.b.c"))
-        assert isinstance(spec.structure, RawSpec)
-        assert spec.structure.raw == "a.b.c"
+        spec1 = FlexSpec.model_validate("a.b.c")
+        spec2 = FlexSpec.model_validate(spec1)
+        assert spec1 is spec2  # Should return the same instance
 
     def test_flexspec_validation_from_rawspec(self) -> None:
         """Test FlexSpec validation from RawSpec instance."""
@@ -578,6 +623,12 @@ class TestFlexSpec:
         obj = ObjectSpec.model_validate({"_obj_": [{"_addr_": "list"}]})
         spec = FlexSpec.model_validate(obj)
         assert spec.structure == obj
+
+    def test_flexspec_validation_with_alias_in_dict(self) -> None:
+        """Test FlexSpec validation when dict contains _ALIAS_SPEC key."""
+        spec = FlexSpec.model_validate({"_spec_": "a.b.c"})
+        assert isinstance(spec.structure, RawSpec)
+        assert spec.structure.raw == "a.b.c"
 
     def test_flexspec_empty_dict(self) -> None:
         """Test FlexSpec with empty dict."""
@@ -601,3 +652,313 @@ class TestFlexSpec:
         result2 = spec(data)
         assert result1 == result2
         assert result1 == 1
+
+
+class TestRegisterResolver:
+    """Tests for register_resolver function."""
+
+    def test_register_resolver_success(self) -> None:
+        """Test successful resolver registration."""
+        register_resolver("test_resolver", lambda x: f"resolved_{x}")
+        assert SpecIntermediate.convert_spec("test_resolver: value").value == "resolved_value"
+
+    def test_register_resolver_duplicate_raises_error(self) -> None:
+        """Test that registering the same resolver twice raises an error."""
+        register_resolver("test_unique", lambda x: x)
+        with pytest.raises(ValueError, match="Resolver 'test_unique' is already registered"):
+            register_resolver("test_unique", lambda x: x)
+
+
+class TestRegisterAccesser:
+    """Tests for register_accesser function."""
+
+    def test_register_accesser_custom_type(self) -> None:
+        """Test registering a custom accesser for a custom type."""
+
+        class CustomContainer:
+            def __init__(self, data: dict[str, Any]) -> None:
+                self._data = data
+
+        def custom_accesser(instance: CustomContainer, index: Union[str, int]) -> tuple[bool, Any]:
+            if isinstance(index, str) and index in instance._data:
+                return True, instance._data[index]
+            return False, None
+
+        register_accesser(CustomContainer, custom_accesser)
+        assert access(CustomContainer({"key1": "value1", "key2": 123}), ("key1",)) == "value1"
+
+    def test_register_accesser_multiple_types(self) -> None:
+        """Test registering accessers for multiple types."""
+
+        class TypeA:
+            value_a = "A"
+
+        class TypeB:
+            value_b = "B"
+
+        def accesser_a(instance: TypeA, index: Union[str, int]) -> tuple[bool, Any]:
+            return (True, instance.value_a) if index == "value_a" else (False, None)
+
+        def accesser_b(instance: TypeB, index: Union[str, int]) -> tuple[bool, Any]:
+            return (True, instance.value_b) if index == "value_b" else (False, None)
+
+        register_accesser(TypeA, accesser_a)
+        register_accesser(TypeB, accesser_b)
+        assert access(TypeA(), ("value_a",)) == "A"
+        assert access(TypeB(), ("value_b",)) == "B"
+
+
+@contextmanager
+def configure_spec_context(
+    support_basemodel: Optional[bool] = None,
+    support_attribute: Optional[bool] = None,
+    raise_error: Optional[bool] = None,
+    return_type: Optional[ReturnType] = None,
+) -> Generator[None, Any, None]:
+    """Context manager to temporarily configure spec settings for testing."""
+    try:
+        configure_spec(
+            support_basemodel=support_basemodel,
+            support_attribute=support_attribute,
+            raise_error=raise_error,
+            return_type=return_type,
+        )
+        yield
+    finally:
+        configure_spec()
+
+
+class TestConfigureSpec:
+    """Tests for configure_spec function."""
+
+    def test_configure_spec_with_raise_error(self) -> None:
+        """Test configure_spec with SpecSettings object."""
+        with configure_spec_context(raise_error=True):
+            with pytest.raises(SpecError, match=r"Key \(x\) not found"):
+                construct({"a": {"b": 1}}, SpecIntermediate(identifier=SPEC_SOURCE, value=("a", "x")))
+
+    def test_configure_spec_with_return_type(self) -> None:
+        """Test configure_spec with keyword arguments."""
+        with configure_spec_context(return_type=ReturnType.SHALLOW_COPY):
+            data = {"a": [1, 2, 3]}
+            result = construct({"a": [1, 2, 3]}, SpecIntermediate(identifier=SPEC_SOURCE, value=("a",)))
+            result.append(4)
+            assert data["a"] == [1, 2, 3]  # Original unchanged due to shallow copy
+
+    def test_configure_spec_with_support_basemodel(self) -> None:
+        """Test configure_spec with support_basemodel=True."""
+
+        class TestModel(BaseModel):
+            name: str
+
+        with configure_spec_context(support_basemodel=True):
+            assert access(TestModel(name="Alice"), ("name",)) == "Alice"
+
+    def test_configure_spec_with_support_attribute(self) -> None:
+        """Test configure_spec with support_attribute=True."""
+
+        class TestClass:
+            def __init__(self) -> None:
+                self.value = 42
+
+        with configure_spec_context(support_attribute=True):
+            assert access(TestClass(), ("value",)) == 42
+
+
+class TestAccessWithBaseModel:
+    """Tests for access function with BaseModel support."""
+
+    def test_access_basemodel_field(self) -> None:
+        """Test accessing a field from a BaseModel instance."""
+
+        class TestModel(BaseModel):
+            name: str
+            age: int
+
+        assert access(TestModel(name="Alice", age=30), ("name",), support_basemodel=True) == "Alice"
+
+    def test_access_basemodel_nested(self) -> None:
+        """Test accessing nested fields in BaseModel."""
+
+        class Address(BaseModel):
+            city: str
+            zip_code: str
+
+        class Person(BaseModel):
+            name: str
+            address: Address
+
+        person = Person(name="Bob", address=Address(city="NYC", zip_code="10001"))
+        assert access(person, ("address", "city"), support_basemodel=True) == "NYC"
+
+    def test_access_basemodel_field_not_set(self) -> None:
+        """Test accessing an unset optional field in BaseModel."""
+
+        class TestModel(BaseModel):
+            name: str
+            optional: Union[str, None] = None
+
+        assert access(TestModel(name="Alice"), ("optional",), support_basemodel=True, raise_error=False) is None
+
+    def test_access_basemodel_with_dict_mixing(self) -> None:
+        """Test accessing BaseModel within dict structure."""
+
+        class Config(BaseModel):
+            timeout: int
+            retry: int
+
+        data = {"settings": Config(timeout=30, retry=3), "version": "1.0"}
+        assert access(data, ("settings", "timeout"), support_basemodel=True) == 30
+
+
+class TestAccessWithAttribute:
+    """Tests for access function with attribute support."""
+
+    def test_access_attribute_simple(self) -> None:
+        """Test accessing object attributes."""
+
+        class SimpleClass:
+            def __init__(self) -> None:
+                self.value = 42
+                self.name = "test"
+
+        assert access(SimpleClass(), ("value",), support_attribute=True) == 42
+
+    def test_access_attribute_nested(self) -> None:
+        """Test accessing nested object attributes."""
+
+        class Inner:
+            def __init__(self) -> None:
+                self.data = "inner_value"
+
+        class Outer:
+            def __init__(self) -> None:
+                self.inner = Inner()
+
+        assert access(Outer(), ("inner", "data"), support_attribute=True) == "inner_value"
+
+    def test_access_attribute_nonexistent(self) -> None:
+        """Test accessing non-existent attribute."""
+
+        class SimpleClass:
+            value = 42
+
+        assert access(SimpleClass(), ("nonexistent",), support_attribute=True, raise_error=False) is None
+
+    def test_access_attribute_with_private(self) -> None:
+        """Test that private attributes are handled securely."""
+
+        class SimpleClass:
+            def __init__(self) -> None:
+                self._private = "should_not_access"
+                self.public = "accessible"
+
+        assert access(SimpleClass(), ("public",), support_attribute=True) == "accessible"
+
+    def test_access_attribute_integer_index_fails(self) -> None:
+        """Test that integer index doesn't work with attribute access."""
+
+        class SimpleClass:
+            value = 42
+
+        assert access(SimpleClass(), (0,), support_attribute=True, raise_error=False) is None
+
+
+class TestConvertSpecMapping:
+    """Tests for convert_spec with Mapping types."""
+
+    def test_convert_spec_ordered_dict(self) -> None:
+        """Test convert_spec preserves OrderedDict type."""
+        pattern = "a.b.c"
+        result_intermediate = SpecIntermediate(identifier=SPEC_SOURCE, value=("a", "b", "c"))
+        result = convert_spec(OrderedDict([("key1", pattern), ("key2", pattern)]))
+        assert isinstance(result, OrderedDict)
+        assert list(result.keys()) == ["key1", "key2"]
+        assert result["key1"] == result_intermediate
+        assert result["key2"] == result_intermediate
+
+    def test_convert_spec_custom_mapping(self) -> None:
+        """Test convert_spec with custom Mapping subclass."""
+
+        class CustomMapping(dict):
+            pass
+
+        result = convert_spec(CustomMapping({"x": "a.b"}))
+        assert isinstance(result, CustomMapping)
+        assert "x" in result
+
+
+class TestAccessCustomAccessers:
+    """Tests for access function with custom accessers."""
+
+    def test_access_with_custom_accesser_list(self) -> None:
+        """Test access with custom accesser list."""
+
+        class SpecialContainer:
+            def __init__(self, items: list[Any]) -> None:
+                self.items = items
+
+        def special_accesser(instance: SpecialContainer, index: Union[str, int]) -> tuple[bool, Any]:
+            if isinstance(index, int) and 0 <= index < len(instance.items):
+                return True, instance.items[index]
+            return False, None
+
+        container = SpecialContainer([10, 20, 30])
+        result = access(container, (1,), accessers=[(SpecialContainer, special_accesser)])
+        assert result == 20
+
+    def test_access_custom_accesser_precedence(self) -> None:
+        """Test that custom accessers are tried in order."""
+
+        class Container:
+            value = "default"
+
+        def first_accesser(instance: Container, index: Union[str, int]) -> tuple[bool, Any]:
+            if index == "first":
+                return True, "first_result"
+            return False, None
+
+        def second_accesser(instance: Container, index: Union[str, int]) -> tuple[bool, Any]:
+            if index == "second":
+                return True, "second_result"
+            return False, None
+
+        container = Container()
+        accessers = [(Container, first_accesser), (Container, second_accesser)]
+
+        assert access(container, ("first",), accessers=accessers) == "first_result"
+        assert access(container, ("second",), accessers=accessers) == "second_result"
+
+    def test_access_custom_accesser_fallback(self) -> None:
+        """Test that access falls back when custom accesser fails."""
+
+        class Container:
+            pass
+
+        def failing_accesser(instance: Container, index: Union[str, int]) -> tuple[bool, Any]:
+            return False, None
+
+        assert access(Container(), ("anything",), accessers=[(Container, failing_accesser)], raise_error=False) is None
+
+
+class TestAccessEdgeCases:
+    """Tests for edge cases in access function."""
+
+    def test_access_empty_source(self) -> None:
+        """Test access with empty source tuple returns the data itself."""
+        data = {"a": 1}
+        assert access(data, ()) == data
+
+    def test_access_with_none_data(self) -> None:
+        """Test access with None data."""
+        assert access(None, ("a",), raise_error=False) is None
+
+    def test_access_deeply_nested_path(self) -> None:
+        """Test access with deeply nested path."""
+        data = {"a": {"b": {"c": {"d": {"e": {"f": 123}}}}}}
+        assert access(data, ("a", "b", "c", "d", "e", "f")) == 123
+
+    def test_access_mixed_dict_list_access(self) -> None:
+        """Test access mixing dict and list indexing."""
+        data = {"users": [{"name": "Alice", "scores": [10, 20, 30]}, {"name": "Bob", "scores": [40, 50, 60]}]}
+        assert access(data, ("users", 1, "scores", 2)) == 60
