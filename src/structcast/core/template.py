@@ -322,7 +322,7 @@ def extend_structure(
             cls: type = type(raw)
             raw = _resolve_jinja_pattern_in_mapping(raw, template_kwargs=template_kwargs, default=default)
             return cls(**{k: _extend(v, dep) for k, v in raw.items()})
-        if isinstance(raw, (list, tuple)):
+        if isinstance(raw, (list, tuple, Sequence)):
             cls = type(raw)
             raw = _resolve_jinja_pattern_in_seq(raw, template_kwargs=template_kwargs, default=default)
             return cls(_extend(v, dep) for v in raw)

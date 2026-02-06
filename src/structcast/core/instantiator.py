@@ -1,7 +1,7 @@
 """Core instantiator logic for StructCast."""
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import field
 from functools import cached_property, partial
 from logging import getLogger
@@ -305,10 +305,8 @@ def instantiate(cfg: Any, *, __depth__: int = 0, __start__: Optional[float] = No
             # Use type() to preserve custom Mapping subclasses
             return type(raw)(**{k: _instantiate(v, dep) for k, v in raw.items()})
         # Security check: Validate list/tuple types explicitly
-        if isinstance(raw, list):
-            return [_instantiate(v, dep) for v in raw]
-        if isinstance(raw, tuple):
-            return tuple(_instantiate(v, dep) for v in raw)
+        if isinstance(raw, (list, tuple, Sequence)):
+            return type(raw)(_instantiate(v, dep) for v in raw)
         # Log warning for unrecognized types
         logger.warning(f"Unrecognized configuration type ({type(raw).__name__}). Returning as is.")
         return raw

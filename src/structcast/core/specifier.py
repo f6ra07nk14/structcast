@@ -1,7 +1,7 @@
 """Module for specification conversion and resolver registration."""
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from copy import copy, deepcopy
 from enum import Enum
 from functools import cached_property
@@ -201,7 +201,7 @@ def convert_spec(cfg: Any, *, __depth__: int = 0, __start__: Optional[float] = N
             return {k: _convert(v, dep) for k, v in raw.items()}
         if isinstance(raw, Mapping):
             return type(raw)(**{k: _convert(v, dep) for k, v in raw.items()})
-        if isinstance(raw, (list, tuple)):
+        if isinstance(raw, (list, tuple, Sequence)):
             return type(raw)(_convert(v, dep) for v in raw)
         raise SpecError(f"Unsupported specification type: {type(raw)}")
 
@@ -405,7 +405,7 @@ def construct(
             return {k: _construct(raw, v) for k, v in sim.items()}
         if isinstance(sim, Mapping):
             return type(sim)(**{k: _construct(raw, v) for k, v in sim.items()})
-        if isinstance(sim, (list, tuple)):
+        if isinstance(sim, (list, tuple, Sequence)):
             return type(sim)(_construct(raw, v) for v in sim)
         logger.debug(f"Got unsupported type ({type(sim)}) in specification construction: {sim}")
         return sim
