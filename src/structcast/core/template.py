@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, Optional, Union
 from jinja2 import Environment, StrictUndefined, Template, Undefined
 from jinja2.meta import find_undeclared_variables
 from jinja2.sandbox import ImmutableSandboxedEnvironment
-from pydantic import BaseModel, Field, model_validator
+from pydantic import Field, model_validator
 from typing_extensions import Self
 
 from structcast.core.constants import MAX_RECURSION_DEPTH, MAX_RECURSION_TIME
@@ -176,8 +176,6 @@ class JinjaYamlTemplate(JinjaTemplate):
     def _validate_raw_with_yaml(cls, raw: Any) -> Any:
         if isinstance(raw, JinjaYamlTemplate):
             return raw
-        if isinstance(raw, BaseModel):
-            raw = raw.model_dump()
         if isinstance(raw, (list, tuple)) and raw and raw[0] in {_ALIAS_JINJA_YAML, _ALIAS_JINJA}:
             if len(raw) == 2:
                 raw = {_ALIAS_JINJA: raw[1]}
@@ -204,8 +202,6 @@ class JinjaJsonTemplate(JinjaTemplate):
     def _validate_raw_with_json(cls, raw: Any) -> Any:
         if isinstance(raw, JinjaJsonTemplate):
             return raw
-        if isinstance(raw, BaseModel):
-            raw = raw.model_dump()
         if isinstance(raw, (list, tuple)) and raw and raw[0] in {_ALIAS_JINJA_JSON, _ALIAS_JINJA}:
             if len(raw) == 2:
                 raw = {_ALIAS_JINJA: raw[1]}
