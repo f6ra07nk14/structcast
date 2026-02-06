@@ -7,7 +7,7 @@ from functools import cached_property, partial
 from logging import getLogger
 from pathlib import Path
 from time import time
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
 from pydantic import (
     BaseModel,
@@ -25,7 +25,7 @@ from typing_extensions import Self, TypeAlias
 
 from structcast.core.constants import MAX_RECURSION_DEPTH, MAX_RECURSION_TIME
 from structcast.core.exceptions import InstantiationError, SpecError
-from structcast.utils.base import import_from_address
+from structcast.utils.base import import_from_address, unroll_call
 from structcast.utils.dataclasses import dataclass
 from structcast.utils.security import validate_attribute
 
@@ -160,15 +160,15 @@ class AttributePattern(BasePattern):
 class CallPattern(BasePattern):
     """Pattern for calling callables."""
 
-    call: Mapping[str, Any] = Field(alias="_call_")
+    call: Any = Field(alias="_call_")
     """The call arguments."""
 
     @model_validator(mode="before")
     @classmethod
     def _validate_raw(cls, raw: Any) -> Any:
         """Validate the call data."""
-        if isinstance(raw, CallPattern):
-            return raw
+        if isinstance(raw, (list, tuple)) and raw and raw[0] == "_call_":
+            return {"_call_": raw[1:]}
         if isinstance(raw, str):
             if raw == "_call_":
                 return {"_call_": {}}
@@ -178,7 +178,12 @@ class CallPattern(BasePattern):
     @model_serializer(mode="wrap")
     def _serialize_model(self, handler: SerializerFunctionWrapHandler) -> Any:
         """Serialize the model."""
-        return handler(self) if self.call else "_call_"
+        res = handler(self)
+        if isinstance(self.call, (dict, Mapping)):
+            return res if self.call else "_call_"
+        if isinstance(self.call, (list, tuple)):
+            return ["_call_", *res["_call_"]] if self.call else "_call_"
+        return res
 
     def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the objects from the pattern."""
@@ -187,7 +192,7 @@ class CallPattern(BasePattern):
             raise InstantiationError("No object to call.")
         runs, last = runs[:-1], runs[-1]
         if callable(last):
-            run = last(**instantiate(self.call, __depth__=depth + 1, __start__=start))
+            run = unroll_call(instantiate(self.call, __depth__=depth + 1, __start__=start), call=last)
             return res_t(patterns=ptns + [self], runs=runs + [run], depth=depth, start=start)
         msg = f"Object of type {type(last).__name__} built from previous patterns is not callable: {ptns}"
         raise InstantiationError(msg)
@@ -196,8 +201,24 @@ class CallPattern(BasePattern):
 class BindPattern(BasePattern):
     """Pattern for partially calling callables."""
 
-    bind: Mapping[str, Any] = Field(alias="_bind_", min_length=1)
+    bind: Any = Field(alias="_bind_", min_length=1)
     """The binding arguments."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _validate_raw(cls, raw: Any) -> Any:
+        """Validate the call data."""
+        if isinstance(raw, (list, tuple)) and raw and raw[0] == "_bind_":
+            return {"_bind_": raw[1:]}
+        return raw
+
+    @model_serializer(mode="wrap")
+    def _serialize_model(self, handler: SerializerFunctionWrapHandler) -> Any:
+        """Serialize the model."""
+        res = handler(self)
+        if isinstance(self.bind, (list, tuple)):
+            return ["_bind_", *res["_bind_"]]
+        return res
 
     def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the objects from the pattern."""
@@ -206,7 +227,13 @@ class BindPattern(BasePattern):
             raise InstantiationError("No object to bind.")
         runs, last = runs[:-1], runs[-1]
         if callable(last):
-            run = partial(last, **instantiate(self.bind, __depth__=depth + 1, __start__=start))
+            param = instantiate(self.bind, __depth__=depth + 1, __start__=start)
+            if isinstance(param, (dict, Mapping)):
+                run = partial(last, **param)
+            elif isinstance(param, (list, tuple)):
+                run = partial(last, *param)
+            else:
+                run = partial(last, param)
             return res_t(patterns=ptns + [self], runs=runs + [run], depth=depth, start=start)
         msg = f"Object of type {type(last).__name__} built from previous patterns is not callable: {ptns}"
         raise InstantiationError(msg)
@@ -316,9 +343,3 @@ def instantiate(cfg: Any, *, __depth__: int = 0, __start__: Optional[float] = No
         return raw
 
     return _instantiate(cfg, __depth__)
-
-
-def _casting(value: Any, *, pipe: list[Callable[[Any], Any]]) -> Any:
-    for call in pipe:
-        value = call(value)
-    return value
