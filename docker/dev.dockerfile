@@ -16,7 +16,7 @@ WORKDIR /home/$CI_USER
 RUN uv python install $PYTHON_VERSIONS --preview --install-dir /home/$CI_USER/.local/bin
 
 # Install dependencies using uv sync (recommended method)
-# Create the venv in a fixed location that will be reused in CI
+# The venv created in /home/ciuser/.venv will be reused in CI via PATH
 RUN --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=README.md,target=README.md \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
