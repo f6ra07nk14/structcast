@@ -1,6 +1,6 @@
 """Tests for instantiation functionalities - Fixed version."""
 
-from collections import Counter
+from collections import Counter, OrderedDict
 import math
 from pathlib import Path
 import time
@@ -10,7 +10,7 @@ from unittest.mock import patch
 from pydantic import ValidationError
 import pytest
 
-from structcast.core.constants import MAX_RECURSION_DEPTH
+from structcast.core.constants import MAX_RECURSION_DEPTH, MAX_RECURSION_TIME
 from structcast.core.exceptions import InstantiationError, SpecError
 from structcast.core.instantiator import (
     AddressPattern,
@@ -19,6 +19,7 @@ from structcast.core.instantiator import (
     CallPattern,
     ObjectPattern,
     PatternResult,
+    WithPipe,
     instantiate,
 )
 from structcast.utils.security import SecurityError
@@ -604,3 +605,133 @@ class TestErrorMessageSanitization:
         # Should mention it's not callable without exposing internals
         assert "not callable" in str(exc_info.value)
         assert "str" in str(exc_info.value)
+
+
+# ============================================================================
+# Test 6: Additional Coverage Tests
+# ============================================================================
+
+
+class TestAdditionalCoverage:
+    """Tests for missing code coverage branches."""
+
+    def test_address_pattern_tuple_format_with_file(self, tmp_path: Path) -> None:
+        """Test AddressPattern with tuple format including file path."""
+        test_file = tmp_path / "module.py"
+        test_file.write_text("value = 42")
+
+        with temporary_registered_dir(tmp_path), configure_security_context(allowed_modules={"module": {None}}):
+            # Test tuple format ["_addr_", address, file]
+            pattern = AddressPattern.model_validate(["_addr_", "module.value", test_file])
+            assert pattern.address == "module.value"
+            assert pattern.file == test_file
+            assert pattern.build().runs[0] == 42
+
+    def test_address_pattern_tuple_format_validation_error(self) -> None:
+        """Test AddressPattern tuple format with invalid data."""
+        with pytest.raises(SpecError, match="Invalid AddressPattern format"):
+            AddressPattern.model_validate(["_addr_", 123, "not_a_path"])
+
+    def test_address_pattern_early_return(self) -> None:
+        """Test AddressPattern validator early return for existing instance."""
+        existing = AddressPattern.model_validate({"_addr_": "list"})
+        assert AddressPattern.model_validate(existing) is existing
+
+    def test_attribute_pattern_nested_attribute_not_found(self) -> None:
+        """Test AttributePattern with nested attribute where intermediate fails."""
+
+        # Create a simple object with an attribute that doesn't have the nested attribute
+        class SimpleObj:
+            value = 10
+
+        with pytest.raises(InstantiationError) as exc_info:
+            AttributePattern.model_validate({"_attr_": "value.nonexistent"}).build(PatternResult(runs=[SimpleObj]))
+
+        # Should mention intermediate object
+        error_msg = str(exc_info.value)
+        assert "intermediate object" in error_msg
+        assert "nonexistent" in error_msg
+
+    def test_call_pattern_early_return(self) -> None:
+        """Test CallPattern validator early return for existing instance."""
+        existing = CallPattern.model_validate({"_call_": {"a": 1}})
+        assert CallPattern.model_validate(existing) is existing
+
+    def test_call_pattern_serializer_empty_call(self) -> None:
+        """Test CallPattern serializes empty call to string '_call_'."""
+        assert CallPattern.model_validate("_call_").model_dump() == "_call_"
+
+    def test_object_pattern_early_return(self) -> None:
+        """Test ObjectPattern validator early return for existing instance."""
+        existing = ObjectPattern.model_validate({"_obj_": [{"_addr_": "list"}]})
+        assert ObjectPattern.model_validate(existing) is existing
+
+    def test_object_pattern_multiple_results_error(self) -> None:
+        """Test ObjectPattern fails when build results in multiple objects."""
+        # Manually create a scenario where we get multiple runs
+        # This shouldn't happen normally, but we test the error handling
+        with patch.object(AddressPattern, "build") as mock_build:
+            # Make the build return a PatternResult with multiple runs
+            mock_build.return_value = PatternResult(
+                patterns=[AddressPattern.model_validate({"_addr_": "list"})],
+                runs=[list, dict],  # Multiple runs
+                depth=0,
+                start=time.time(),
+            )
+            with pytest.raises(InstantiationError, match="did not result in a single object"):
+                ObjectPattern.model_validate({"_obj_": [{"_addr_": "list"}]}).build()
+
+    def test_instantiate_with_mapping_subclass(self) -> None:
+        """Test instantiate with non-dict Mapping subclass."""
+        result = instantiate(OrderedDict([("a", 1), ("b", OrderedDict([("c", 2)]))]))
+        assert isinstance(result, OrderedDict)
+        assert result["a"] == 1
+        assert isinstance(result["b"], OrderedDict)
+        assert result["b"]["c"] == 2
+
+    def test_instantiate_unrecognized_type_warning(self) -> None:
+        """Test instantiate logs warning for unrecognized types."""
+
+        # Custom class that's not a recognized type
+        class CustomType:
+            def __init__(self) -> None:
+                self.value = 42
+
+        obj = CustomType()
+        with patch("structcast.core.instantiator.logger.warning") as mock_warning:
+            assert instantiate(obj) is obj
+            mock_warning.assert_called_once()
+            assert "Unrecognized configuration type" in mock_warning.call_args[0][0]
+            assert "CustomType" in mock_warning.call_args[0][0]
+
+    def test_instantiate_multiple_runs_error(self) -> None:
+        """Test instantiate raises error when ObjectPattern produces multiple runs."""
+        # Mock ObjectPattern to return multiple runs
+        with patch.object(ObjectPattern, "build") as mock_build:
+            mock_build.return_value = PatternResult(
+                patterns=[],
+                runs=[list, dict],  # Multiple runs
+                depth=0,
+                start=time.time(),
+            )
+
+            cfg = {"_obj_": [{"_addr_": "list"}]}
+            with pytest.raises(InstantiationError, match="should result in a single object"):
+                instantiate(cfg)
+
+    def test_recursion_time_exceeded_in_validate_pattern_result(self) -> None:
+        """Test that _validate_pattern_result raises error when time exceeded."""
+        pattern = AddressPattern.model_validate({"_addr_": "dict"})
+        with pytest.raises(InstantiationError, match="Maximum recursion time exceeded"):
+            pattern.build(PatternResult(runs=[list], depth=0, start=time.time() - MAX_RECURSION_TIME - 1))
+
+
+class TestWithPipeCoverage:
+    """Tests for WithPipe class coverage."""
+
+    def test_withpipe_non_callable_pipe_element(self) -> None:
+        """Test WithPipe raises error for non-callable pipe element."""
+        # Create a WithPipe with a pipe element that builds to non-callable (an integer value)
+        # int() returns 0 which is not callable, and this should raise SpecError during validation
+        with pytest.raises(SpecError, match="not callable"):
+            WithPipe.model_validate({"_pipe_": [{"_obj_": [{"_addr_": "int"}, {"_call_": {}}]}]})
