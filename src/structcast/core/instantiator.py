@@ -111,6 +111,11 @@ class AddressPattern(BasePattern):
                 raise SpecError(f"Invalid AddressPattern format: {err.errors()}") from err
         return raw
 
+    @model_serializer()
+    def _serialize_model(self) -> Any:
+        """Serialize the model."""
+        return ["_addr_", self.address, self.file] if self.file else ["_addr_", self.address]
+
     def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the objects from the pattern."""
         res_t, ptns, runs, depth, start = _validate_pattern_result(result)
