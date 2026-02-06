@@ -50,17 +50,17 @@ class JinjaSettings:
     """List of Jinja extensions to enable."""
 
 
-__jinja_settings = JinjaSettings()
+_jinja_settings = JinjaSettings()
 """Global settings for Jinja templates."""
 
 
 def get_environment() -> Environment:
     """Get the Jinja environment options."""
-    return __jinja_settings.environment_type(
-        undefined=__jinja_settings.undefined_type,
-        trim_blocks=__jinja_settings.trim_blocks,
-        lstrip_blocks=__jinja_settings.lstrip_blocks,
-        extensions=__jinja_settings.extensions,
+    return _jinja_settings.environment_type(
+        undefined=_jinja_settings.undefined_type,
+        trim_blocks=_jinja_settings.trim_blocks,
+        lstrip_blocks=_jinja_settings.lstrip_blocks,
+        extensions=_jinja_settings.extensions,
     )
 
 
@@ -103,11 +103,11 @@ def configure_jinja(
         if extensions is not None:
             kwargs["extensions"] = extensions
         settings = JinjaSettings(**kwargs)
-    __jinja_settings.environment_type = settings.environment_type
-    __jinja_settings.undefined_type = settings.undefined_type
-    __jinja_settings.trim_blocks = settings.trim_blocks
-    __jinja_settings.lstrip_blocks = settings.lstrip_blocks
-    __jinja_settings.extensions = settings.extensions.copy()
+    _jinja_settings.environment_type = settings.environment_type
+    _jinja_settings.undefined_type = settings.undefined_type
+    _jinja_settings.trim_blocks = settings.trim_blocks
+    _jinja_settings.lstrip_blocks = settings.lstrip_blocks
+    _jinja_settings.extensions = settings.extensions.copy()
 
 
 _ALIAS_JINJA = "_jinja_"
