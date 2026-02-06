@@ -25,8 +25,8 @@ from typing_extensions import Self
 
 from structcast.core.constants import SPEC_FORMAT, SPEC_SOURCE
 from structcast.core.exceptions import SpecError
-from structcast.core.instantiator import ObjectPattern, _casting
-from structcast.utils.base import check_elements
+from structcast.core.instantiator import ObjectPattern
+from structcast.utils.base import check_elements, unroll_call
 from structcast.utils.dataclasses import dataclass
 from structcast.utils.security import SecurityError, split_attribute, validate_attribute
 
@@ -419,6 +419,12 @@ def construct(
 
 _ALIAS_SPEC = "_spec_"
 _ALIAS_PIPE = "_pipe_"
+
+
+def _casting(value: Any, *, pipe: list[Callable[[Any], Any]]) -> Any:
+    for call in pipe:
+        value = unroll_call(value, call=call)
+    return value
 
 
 class WithPipe(BaseModel):
