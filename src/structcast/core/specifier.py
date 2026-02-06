@@ -4,17 +4,20 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from copy import copy, deepcopy
 from enum import Enum
-from functools import cached_property
+from functools import cached_property, partial
 from logging import getLogger
 from time import time
 from typing import Any, Callable, Optional, Union
 
 from pydantic import (
     BaseModel,
+    ConfigDict,
     Field,
     SerializerFunctionWrapHandler,
     TypeAdapter,
     ValidationError,
+    field_serializer,
+    field_validator,
     model_serializer,
     model_validator,
 )
@@ -22,7 +25,8 @@ from typing_extensions import Self
 
 from structcast.core.constants import SPEC_FORMAT, SPEC_SOURCE
 from structcast.core.exceptions import SpecError
-from structcast.core.instantiator import ObjectPattern, WithPipe
+from structcast.core.instantiator import ObjectPattern, _casting
+from structcast.utils.base import check_elements
 from structcast.utils.dataclasses import dataclass
 from structcast.utils.security import SecurityError, split_attribute, validate_attribute
 
@@ -414,6 +418,45 @@ def construct(
 
 
 _ALIAS_SPEC = "_spec_"
+_ALIAS_PIPE = "_pipe_"
+
+
+class WithPipe(BaseModel):
+    """Model wrapper that applies a pipe of casting functions after instantiation."""
+
+    model_config = ConfigDict(frozen=True, validate_default=True, extra="forbid", serialize_by_alias=True)
+
+    pipe: list[ObjectPattern] = Field(default_factory=list, alias=_ALIAS_PIPE)
+    """List of casting patterns to apply after construction."""
+
+    @field_validator("pipe", mode="before")
+    @classmethod
+    def _validate_pipe(cls, pipe: Any) -> list[ObjectPattern]:
+        """Validate the pipe field."""
+        return check_elements(TypeAdapter(Optional[Union[ObjectPattern, list[ObjectPattern]]]).validate_python(pipe))
+
+    @model_validator(mode="after")
+    def _validate_casting(self) -> Self:
+        """Validate the constructor."""
+        _ = self.casting  # Ensure casting are initialized and cached
+        return self
+
+    @field_serializer("pipe", mode="wrap")
+    def _serialize_pipe(self, value: list[ObjectPattern], handler: SerializerFunctionWrapHandler) -> list[Any]:
+        """Serialize the pipe field."""
+        res = handler(value)
+        return res[0] if len(res) == 1 else res
+
+    @cached_property
+    def casting(self) -> Callable[[Any], Any]:
+        """Get the casting function."""
+        pipe: list[Callable[[Any], Any]] = []
+        for ind, ptn in enumerate(self.pipe):
+            inst = ptn.build().runs[0]
+            if not callable(inst):
+                raise SpecError(f"Invalid pipe at position {ind} is not callable: {inst}")
+            pipe.append(inst)
+        return partial(_casting, pipe=pipe)
 
 
 class _Constructor(WithPipe, ABC):

@@ -17,7 +17,6 @@ from pydantic import (
     SerializerFunctionWrapHandler,
     TypeAdapter,
     ValidationError,
-    field_serializer,
     field_validator,
     model_serializer,
     model_validator,
@@ -26,7 +25,7 @@ from typing_extensions import Self, TypeAlias
 
 from structcast.core.constants import MAX_RECURSION_DEPTH, MAX_RECURSION_TIME
 from structcast.core.exceptions import InstantiationError, SpecError
-from structcast.utils.base import check_elements, import_from_address
+from structcast.utils.base import import_from_address
 from structcast.utils.dataclasses import dataclass
 from structcast.utils.security import validate_attribute
 
@@ -323,44 +322,3 @@ def _casting(value: Any, *, pipe: list[Callable[[Any], Any]]) -> Any:
     for call in pipe:
         value = call(value)
     return value
-
-
-_ALIAS_PIPE = "_pipe_"
-
-
-class WithPipe(BaseModel):
-    """Model wrapper that applies a pipe of casting functions after instantiation."""
-
-    model_config = ConfigDict(frozen=True, validate_default=True, extra="forbid", serialize_by_alias=True)
-
-    pipe: list[ObjectPattern] = Field(default_factory=list, alias=_ALIAS_PIPE)
-    """List of casting patterns to apply after construction."""
-
-    @field_validator("pipe", mode="before")
-    @classmethod
-    def _validate_pipe(cls, pipe: Any) -> list[ObjectPattern]:
-        """Validate the pipe field."""
-        return check_elements(TypeAdapter(Optional[Union[ObjectPattern, list[ObjectPattern]]]).validate_python(pipe))
-
-    @model_validator(mode="after")
-    def _validate_casting(self) -> Self:
-        """Validate the constructor."""
-        _ = self.casting  # Ensure casting are initialized and cached
-        return self
-
-    @field_serializer("pipe", mode="wrap")
-    def _serialize_pipe(self, value: list[ObjectPattern], handler: SerializerFunctionWrapHandler) -> list[Any]:
-        """Serialize the pipe field."""
-        res = handler(value)
-        return res[0] if len(res) == 1 else res
-
-    @cached_property
-    def casting(self) -> Callable[[Any], Any]:
-        """Get the casting function."""
-        pipe: list[Callable[[Any], Any]] = []
-        for ind, ptn in enumerate(self.pipe):
-            inst = ptn.build().runs[0]
-            if not callable(inst):
-                raise SpecError(f"Invalid pipe at position {ind} is not callable: {inst}")
-            pipe.append(inst)
-        return partial(_casting, pipe=pipe)

@@ -15,9 +15,9 @@ from pydantic import Field, model_validator
 from typing_extensions import Self
 
 from structcast.core.constants import MAX_RECURSION_DEPTH, MAX_RECURSION_TIME
-from structcast.core.exceptions import StructuredExtensionError
-from structcast.core.instantiator import InstantiationError, ObjectPattern, WithPipe
-from structcast.core.specifier import SpecError
+from structcast.core.exceptions import InstantiationError, SpecError, StructuredExtensionError
+from structcast.core.instantiator import ObjectPattern
+from structcast.core.specifier import WithPipe
 from structcast.utils.dataclasses import dataclass
 
 if TYPE_CHECKING:

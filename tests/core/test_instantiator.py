@@ -19,7 +19,6 @@ from structcast.core.instantiator import (
     CallPattern,
     ObjectPattern,
     PatternResult,
-    WithPipe,
     instantiate,
 )
 from structcast.utils.security import SecurityError
@@ -724,14 +723,3 @@ class TestAdditionalCoverage:
         pattern = AddressPattern.model_validate({"_addr_": "dict"})
         with pytest.raises(InstantiationError, match="Maximum recursion time exceeded"):
             pattern.build(PatternResult(runs=[list], depth=0, start=time.time() - MAX_RECURSION_TIME - 1))
-
-
-class TestWithPipeCoverage:
-    """Tests for WithPipe class coverage."""
-
-    def test_withpipe_non_callable_pipe_element(self) -> None:
-        """Test WithPipe raises error for non-callable pipe element."""
-        # Create a WithPipe with a pipe element that builds to non-callable (an integer value)
-        # int() returns 0 which is not callable, and this should raise SpecError during validation
-        with pytest.raises(SpecError, match="not callable"):
-            WithPipe.model_validate({"_pipe_": [{"_obj_": [{"_addr_": "int"}, {"_call_": {}}]}]})

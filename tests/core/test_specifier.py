@@ -18,6 +18,7 @@ from structcast.core.specifier import (
     RawSpec,
     ReturnType,
     SpecIntermediate,
+    WithPipe,
     access,
     configure_spec,
     construct,
@@ -962,3 +963,14 @@ class TestAccessEdgeCases:
         """Test access mixing dict and list indexing."""
         data = {"users": [{"name": "Alice", "scores": [10, 20, 30]}, {"name": "Bob", "scores": [40, 50, 60]}]}
         assert access(data, ("users", 1, "scores", 2)) == 60
+
+
+class TestWithPipeCoverage:
+    """Tests for WithPipe class coverage."""
+
+    def test_withpipe_non_callable_pipe_element(self) -> None:
+        """Test WithPipe raises error for non-callable pipe element."""
+        # Create a WithPipe with a pipe element that builds to non-callable (an integer value)
+        # int() returns 0 which is not callable, and this should raise SpecError during validation
+        with pytest.raises(SpecError, match="not callable"):
+            WithPipe.model_validate({"_pipe_": [{"_obj_": [{"_addr_": "int"}, {"_call_": {}}]}]})
