@@ -15,6 +15,7 @@ from structcast.core.specifier import (
     ReturnType,
     SpecIntermediate,
     access,
+    construct,
     convert_spec,
 )
 
@@ -60,6 +61,196 @@ def test_access() -> None:
     assert access(data, ["a", 0, "b", 0, "c"]) == 1
     assert access(data, ["a", 1]) is None
     assert access(data, ["a", "a"]) is None
+
+
+class TestConstruct:
+    """Tests for construct function."""
+
+    def test_construct_with_none(self) -> None:
+        """Test construct with None spec."""
+        assert construct({"a": 1}, None) is None
+
+    def test_construct_with_primitive_spec(self) -> None:
+        """Test construct with primitive types as spec."""
+        data = {"a": 1}
+        assert construct(data, "hello") == "hello"
+        assert construct(data, 123) == 123
+        assert construct(data, 3.14) == 3.14
+        assert construct(data, True) is True
+        assert construct(data, b"bytes") == b"bytes"
+
+    def test_construct_with_spec_intermediate_source(self) -> None:
+        """Test construct with SpecIntermediate using SPEC_SOURCE."""
+        data = {"a": {"b": {"c": 123}}}
+        spec = SpecIntermediate(identifier=SPEC_SOURCE, value=("a", "b", "c"))
+        assert construct(data, spec) == 123
+
+    def test_construct_with_spec_intermediate_constant(self) -> None:
+        """Test construct with SpecIntermediate using SPEC_CONSTANT."""
+        data = {"a": 1}
+        spec = SpecIntermediate(identifier=SPEC_CONSTANT, value="fixed_value")
+        assert construct(data, spec) == "fixed_value"
+
+    def test_construct_with_dict_spec(self) -> None:
+        """Test construct with dict specification."""
+        data = {"a": {"b": 1}, "x": {"y": 2}}
+        spec = {
+            "first": SpecIntermediate(identifier=SPEC_SOURCE, value=("a", "b")),
+            "second": SpecIntermediate(identifier=SPEC_SOURCE, value=("x", "y")),
+        }
+        assert construct(data, spec) == {"first": 1, "second": 2}
+
+    def test_construct_with_list_spec(self) -> None:
+        """Test construct with list specification."""
+        data = {"a": 1, "b": 2, "c": 3}
+        spec = [
+            SpecIntermediate(identifier=SPEC_SOURCE, value=("a",)),
+            SpecIntermediate(identifier=SPEC_SOURCE, value=("b",)),
+            SpecIntermediate(identifier=SPEC_SOURCE, value=("c",)),
+        ]
+        assert construct(data, spec) == [1, 2, 3]
+
+    def test_construct_with_tuple_spec(self) -> None:
+        """Test construct with tuple specification."""
+        data = {"a": 1, "b": 2}
+        spec = (
+            SpecIntermediate(identifier=SPEC_SOURCE, value=("a",)),
+            SpecIntermediate(identifier=SPEC_SOURCE, value=("b",)),
+        )
+        assert construct(data, spec) == (1, 2)
+
+    def test_construct_with_nested_dict_spec(self) -> None:
+        """Test construct with nested dict specification."""
+        data = {"a": 1, "b": 2, "c": 3}
+        spec = {
+            "nested": {
+                "first": SpecIntermediate(identifier=SPEC_SOURCE, value=("a",)),
+                "second": SpecIntermediate(identifier=SPEC_SOURCE, value=("b",)),
+            },
+            "direct": SpecIntermediate(identifier=SPEC_SOURCE, value=("c",)),
+        }
+        assert construct(data, spec) == {"nested": {"first": 1, "second": 2}, "direct": 3}
+
+    def test_construct_with_nested_list_spec(self) -> None:
+        """Test construct with nested list specification."""
+        data = {"a": 1, "b": 2, "c": 3, "d": 4}
+        spec = [
+            [
+                SpecIntermediate(identifier=SPEC_SOURCE, value=("a",)),
+                SpecIntermediate(identifier=SPEC_SOURCE, value=("b",)),
+            ],
+            [
+                SpecIntermediate(identifier=SPEC_SOURCE, value=("c",)),
+                SpecIntermediate(identifier=SPEC_SOURCE, value=("d",)),
+            ],
+        ]
+        assert construct(data, spec) == [[1, 2], [3, 4]]
+
+    def test_construct_with_mixed_spec(self) -> None:
+        """Test construct with mixed dict and list specification."""
+        data = {"a": 1, "b": 2, "c": 3}
+        spec = {
+            "values": [
+                SpecIntermediate(identifier=SPEC_SOURCE, value=("a",)),
+                SpecIntermediate(identifier=SPEC_SOURCE, value=("b",)),
+                SpecIntermediate(identifier=SPEC_SOURCE, value=("c",)),
+            ]
+        }
+        assert construct(data, spec) == {"values": [1, 2, 3]}
+
+    def test_construct_with_mixed_primitives_and_specs(self) -> None:
+        """Test construct with mixed primitive values and SpecIntermediate."""
+        data = {"a": 1}
+        spec = {
+            "dynamic": SpecIntermediate(identifier=SPEC_SOURCE, value=("a",)),
+            "static": "constant_value",
+            "number": 42,
+        }
+        assert construct(data, spec) == {"dynamic": 1, "static": "constant_value", "number": 42}
+
+    def test_construct_with_return_type_reference(self) -> None:
+        """Test construct with return_type=REFERENCE."""
+        data = {"a": {"b": [1, 2, 3]}}
+        spec = SpecIntermediate(identifier=SPEC_SOURCE, value=("a", "b"))
+        result = construct(data, spec, return_type=ReturnType.REFERENCE)
+        assert result == [1, 2, 3]
+        # Verify it's a reference
+        result.append(4)
+        assert data["a"]["b"] == [1, 2, 3, 4]
+
+    def test_construct_with_return_type_shallow_copy(self) -> None:
+        """Test construct with return_type=SHALLOW_COPY."""
+        data = {"a": {"b": [1, 2, 3]}}
+        spec = SpecIntermediate(identifier=SPEC_SOURCE, value=("a", "b"))
+        result = construct(data, spec, return_type=ReturnType.SHALLOW_COPY)
+        assert result == [1, 2, 3]
+        # Verify it's a shallow copy
+        result.append(4)
+        assert data["a"]["b"] == [1, 2, 3]
+
+    def test_construct_with_return_type_deep_copy(self) -> None:
+        """Test construct with return_type=DEEP_COPY."""
+        data = {"a": {"b": {"c": [1, 2, 3]}}}
+        spec = SpecIntermediate(identifier=SPEC_SOURCE, value=("a", "b"))
+        result = construct(data, spec, return_type=ReturnType.DEEP_COPY)
+        assert result == {"c": [1, 2, 3]}
+        # Verify it's a deep copy
+        result["c"].append(4)
+        assert data["a"]["b"]["c"] == [1, 2, 3]
+
+    def test_construct_with_raise_error_false(self) -> None:
+        """Test construct with raise_error=False."""
+        data = {"a": {"b": 1}}
+        spec = SpecIntermediate(identifier=SPEC_SOURCE, value=("a", "x", "y"))
+        result = construct(data, spec, raise_error=False)
+        assert result is None
+
+    def test_construct_with_raise_error_true(self) -> None:
+        """Test construct with raise_error=True."""
+        data = {"a": {"b": 1}}
+        spec = SpecIntermediate(identifier=SPEC_SOURCE, value=("a", "x", "y"))
+        with pytest.raises(SpecError):
+            construct(data, spec, raise_error=True)
+
+    def test_construct_with_complex_nested_structure(self) -> None:
+        """Test construct with complex nested structure."""
+        data = {
+            "users": [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}],
+            "config": {"timeout": 30, "retry": 3},
+        }
+        spec = {
+            "user_names": [
+                SpecIntermediate(identifier=SPEC_SOURCE, value=("users", 0, "name")),
+                SpecIntermediate(identifier=SPEC_SOURCE, value=("users", 1, "name")),
+            ],
+            "settings": {
+                "timeout": SpecIntermediate(identifier=SPEC_SOURCE, value=("config", "timeout")),
+                "retry_count": SpecIntermediate(identifier=SPEC_SOURCE, value=("config", "retry")),
+            },
+        }
+        assert construct(data, spec) == {
+            "user_names": ["Alice", "Bob"],
+            "settings": {"timeout": 30, "retry_count": 3},
+        }
+
+    def test_construct_with_empty_dict_spec(self) -> None:
+        """Test construct with empty dict specification."""
+        assert construct({"a": 1}, {}) == {}
+
+    def test_construct_with_empty_list_spec(self) -> None:
+        """Test construct with empty list specification."""
+        assert construct({"a": 1}, []) == []
+
+    def test_construct_preserves_tuple_type(self) -> None:
+        """Test that construct preserves tuple type in spec."""
+        data = {"a": 1, "b": 2}
+        spec = (
+            SpecIntermediate(identifier=SPEC_SOURCE, value=("a",)),
+            SpecIntermediate(identifier=SPEC_SOURCE, value=("b",)),
+        )
+        result = construct(data, spec)
+        assert isinstance(result, tuple)
+        assert result == (1, 2)
 
 
 class TestRawSpec:
@@ -272,8 +463,7 @@ class TestFlexSpec:
 
     def test_flexspec_initialization_objectspec(self) -> None:
         """Test FlexSpec initialization with ObjectSpec."""
-        spec = FlexSpec.model_validate({"_obj_": [{"_addr_": "list"}]})
-        assert isinstance(spec.structure, ObjectSpec)
+        assert isinstance(FlexSpec.model_validate({"_obj_": [{"_addr_": "list"}]}).structure, ObjectSpec)
 
     def test_flexspec_initialization_dict(self) -> None:
         """Test FlexSpec initialization with dict structure."""
@@ -297,80 +487,56 @@ class TestFlexSpec:
 
     def test_flexspec_initialization_from_dict_alias(self) -> None:
         """Test FlexSpec initialization from dict with alias."""
-        spec = FlexSpec(**{"_spec_": "a.b.c"})
-        assert isinstance(spec.structure, RawSpec)
+        assert isinstance(FlexSpec(**{"_spec_": "a.b.c"}).structure, RawSpec)
 
     def test_flexspec_construct_rawspec(self) -> None:
         """Test FlexSpec construction with RawSpec."""
-        data = {"a": {"b": {"c": 123}}}
-        spec = FlexSpec.model_validate("a.b.c")
-        result = spec(data)
-        assert result == 123
+        assert FlexSpec.model_validate("a.b.c")({"a": {"b": {"c": 123}}}) == 123
 
     def test_flexspec_construct_objectspec(self) -> None:
         """Test FlexSpec construction with ObjectSpec."""
-        spec = FlexSpec.model_validate({"_obj_": [{"_addr_": "list"}]})
-        result = spec({})
-        assert result is list
+        assert FlexSpec.model_validate({"_obj_": [{"_addr_": "list"}]})({}) is list
 
     def test_flexspec_construct_dict(self) -> None:
         """Test FlexSpec construction with dict structure."""
-        data = {"a": {"b": 1}, "x": {"y": 2}}
-        spec = FlexSpec.model_validate({"first": "a.b", "second": "x.y"})
-        result = spec(data)
+        result = FlexSpec.model_validate({"first": "a.b", "second": "x.y"})({"a": {"b": 1}, "x": {"y": 2}})
         assert result == {"first": 1, "second": 2}
 
     def test_flexspec_construct_list(self) -> None:
         """Test FlexSpec construction with list structure."""
-        data = {"a": 1, "b": 2, "c": 3}
-        spec = FlexSpec.model_validate(["a", "b", "c"])
-        result = spec(data)
-        assert result == [1, 2, 3]
+        assert FlexSpec.model_validate(["a", "b", "c"])({"a": 1, "b": 2, "c": 3}) == [1, 2, 3]
 
     def test_flexspec_construct_nested_dict(self) -> None:
         """Test FlexSpec construction with nested dict structure."""
         data = {"a": {"b": 1}, "x": {"y": 2}, "z": 3}
-        spec = FlexSpec.model_validate({"nested": {"first": "a.b", "second": "x.y"}, "direct": "z"})
-        result = spec(data)
+        result = FlexSpec.model_validate({"nested": {"first": "a.b", "second": "x.y"}, "direct": "z"})(data)
         assert result == {"nested": {"first": 1, "second": 2}, "direct": 3}
 
     def test_flexspec_construct_nested_list(self) -> None:
         """Test FlexSpec construction with nested list structure."""
-        data = {"a": 1, "b": 2, "c": 3, "d": 4}
-        spec = FlexSpec.model_validate([["a", "b"], ["c", "d"]])
-        result = spec(data)
-        assert result == [[1, 2], [3, 4]]
+        assert FlexSpec.model_validate([["a", "b"], ["c", "d"]])({"a": 1, "b": 2, "c": 3, "d": 4}) == [[1, 2], [3, 4]]
 
     def test_flexspec_construct_mixed(self) -> None:
         """Test FlexSpec construction with mixed dict and list."""
-        data = {"a": 1, "b": 2, "c": 3}
-        spec = FlexSpec.model_validate({"values": ["a", "b", "c"]})
-        result = spec(data)
-        assert result == {"values": [1, 2, 3]}
+        assert FlexSpec.model_validate({"values": ["a", "b", "c"]})({"a": 1, "b": 2, "c": 3}) == {"values": [1, 2, 3]}
 
     def test_flexspec_construct_with_constant(self) -> None:
         """Test FlexSpec construction with constant values."""
-        data = {"a": 1}
-        spec = FlexSpec.model_validate({"dynamic": "a", "static": "constant: fixed"})
-        result = spec(data)
+        result = FlexSpec.model_validate({"dynamic": "a", "static": "constant: fixed"})({"a": 1})
         assert result == {"dynamic": 1, "static": "fixed"}
 
     def test_flexspec_construct_objectspec_in_dict(self) -> None:
         """Test FlexSpec construction with ObjectSpec inside dict."""
-        spec = FlexSpec.model_validate({"cls": {"_obj_": [{"_addr_": "list"}]}})
-        result = spec({})
-        assert result == {"cls": list}
+        assert FlexSpec.model_validate({"cls": {"_obj_": [{"_addr_": "list"}]}})({}) == {"cls": list}
 
     def test_flexspec_spec_property_rawspec(self) -> None:
         """Test FlexSpec spec property with RawSpec."""
-        spec = FlexSpec.model_validate("a.b.c")
-        assert isinstance(spec.spec, SpecIntermediate)
+        assert isinstance(FlexSpec.model_validate("a.b.c").spec, SpecIntermediate)
 
     def test_flexspec_spec_property_dict(self) -> None:
         """Test FlexSpec spec property with dict."""
         spec = FlexSpec.model_validate({"a": "x.y", "b": "p.q"})
         assert isinstance(spec.spec, dict)
-        print(spec.spec)
         assert all(isinstance(v, SpecIntermediate) for v in spec.spec.values())
 
     def test_flexspec_spec_property_list(self) -> None:
@@ -381,34 +547,25 @@ class TestFlexSpec:
 
     def test_flexspec_serialization_rawspec(self) -> None:
         """Test FlexSpec serialization with RawSpec."""
-        spec = FlexSpec.model_validate("a.b.c")
-        serialized = spec.model_dump()
-        assert serialized == "a.b.c"
+        assert FlexSpec.model_validate("a.b.c").model_dump() == "a.b.c"
 
     def test_flexspec_serialization_objectspec(self) -> None:
         """Test FlexSpec serialization with ObjectSpec."""
-        spec = FlexSpec.model_validate({"_obj_": [{"_addr_": "list"}]})
-        serialized = spec.model_dump()
-        assert serialized == ["_obj_", ["_addr_", "list"]]
+        assert FlexSpec.model_validate({"_obj_": [{"_addr_": "list"}]}).model_dump() == ["_obj_", ["_addr_", "list"]]
 
     def test_flexspec_serialization_dict(self) -> None:
         """Test FlexSpec serialization with dict."""
-        spec = FlexSpec.model_validate({"a": "x.y", "b": "p.q"})
-        serialized = spec.model_dump()
-        assert serialized == {"a": "x.y", "b": "p.q"}
+        assert FlexSpec.model_validate({"a": "x.y", "b": "p.q"}).model_dump() == {"a": "x.y", "b": "p.q"}
 
     def test_flexspec_serialization_list(self) -> None:
         """Test FlexSpec serialization with list."""
-        spec = FlexSpec.model_validate(["a.b", "x.y"])
-        serialized = spec.model_dump()
-        assert serialized == ["a.b", "x.y"]
+        assert FlexSpec.model_validate(["a.b", "x.y"]).model_dump() == ["a.b", "x.y"]
 
     def test_flexspec_validation_from_flexspec(self) -> None:
         """Test FlexSpec validation from another FlexSpec instance."""
-        spec1 = FlexSpec.model_validate("a.b.c")
-        spec2 = FlexSpec.model_validate(spec1)
-        assert isinstance(spec2.structure, RawSpec)
-        assert spec2.structure.raw == "a.b.c"
+        spec = FlexSpec.model_validate(FlexSpec.model_validate("a.b.c"))
+        assert isinstance(spec.structure, RawSpec)
+        assert spec.structure.raw == "a.b.c"
 
     def test_flexspec_validation_from_rawspec(self) -> None:
         """Test FlexSpec validation from RawSpec instance."""
@@ -424,21 +581,16 @@ class TestFlexSpec:
 
     def test_flexspec_empty_dict(self) -> None:
         """Test FlexSpec with empty dict."""
-        spec = FlexSpec.model_validate({})
-        result = spec({"a": 1})
-        assert result == {}
+        assert FlexSpec.model_validate({})({"a": 1}) == {}
 
     def test_flexspec_empty_list(self) -> None:
         """Test FlexSpec with empty list."""
-        spec = FlexSpec.model_validate([])
-        result = spec({"a": 1})
-        assert result == []
+        assert FlexSpec.model_validate([])({"a": 1}) == []
 
     def test_flexspec_deeply_nested(self) -> None:
         """Test FlexSpec with deeply nested structure."""
         data = {"a": 1, "b": 2, "c": 3, "d": 4}
-        spec = FlexSpec.model_validate({"level1": {"level2": {"level3": ["a", "b"]}, "other": ["c", "d"]}})
-        result = spec(data)
+        result = FlexSpec.model_validate({"level1": {"level2": {"level3": ["a", "b"]}, "other": ["c", "d"]}})(data)
         assert result == {"level1": {"level2": {"level3": [1, 2]}, "other": [3, 4]}}
 
     def test_flexspec_construct_idempotent(self) -> None:
