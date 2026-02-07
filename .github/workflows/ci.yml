@@ -188,6 +188,7 @@ jobs:
         run: |
           echo "=== Running all tox environments ==="
           export PYTHONPATH="$(pwd)/src"
+          export HOME="$(pwd)"
           tox run-parallel --parallel all
 
   # Cleanup Job: Delete Docker images for feature branches after successful PR merge
