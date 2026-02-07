@@ -407,6 +407,9 @@ def check_path(
         candidate.is_relative_to(Path.cwd())
         or any(candidate.is_relative_to(d) for d in _allowed_directories)
     ):
+        # Note: We allow paths relative to cwd to support Docker/container environments
+        # where cwd may not be under the home directory. Users should ensure cwd is set
+        # to a safe location (e.g., project directory, not system directories like /).
         raise SecurityError(f"Path is outside of allowed directories: {path}")
     if hidden_check and any(p.startswith(".") for p in candidate.parts):
         raise SecurityError(f"Path contains hidden directories which are not allowed: {path}")
