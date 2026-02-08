@@ -15,6 +15,9 @@ ARG PYTHON_VERSIONS="3.8 3.9 3.10 3.11 3.12 3.13"
 ENV HOME=/app
 WORKDIR /app
 
+# Configure UV cache directory (persistent across HOME changes)
+ENV UV_CACHE_DIR=/app/.cache/uv
+
 # Install multiple Python versions
 RUN uv python install $PYTHON_VERSIONS --preview
 
@@ -22,6 +25,7 @@ RUN uv python install $PYTHON_VERSIONS --preview
 # The venv created in /app/.venv will be reused in CI via PATH
 RUN --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=README.md,target=README.md \
+    --mount=type=bind,source=tox.ini,target=tox.ini \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --frozen --no-install-project --dev --group tox
 
