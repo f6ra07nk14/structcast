@@ -12,6 +12,9 @@ StructCast is a Python library for declaratively constructing, accessing, transf
   - [Table of Contents](#table-of-contents)
   - [Key Features](#key-features)
   - [Installation](#installation)
+    - [Install from PyPI](#install-from-pypi)
+    - [Add to an existing project](#add-to-an-existing-project)
+    - [Install from source (development)](#install-from-source-development)
   - [Quick Start](#quick-start)
     - [1. Instantiate Objects from Config](#1-instantiate-objects-from-config)
     - [2. Access Nested Data with Specifiers](#2-access-nested-data-with-specifiers)
@@ -27,6 +30,7 @@ StructCast is a Python library for declaratively constructing, accessing, transf
     - [StructCast vs glom](#structcast-vs-glom)
     - [Summary Table](#summary-table)
   - [Examples](#examples)
+    - [Advanced Examples](#advanced-examples)
   - [Requirements](#requirements)
   - [License](#license)
 
@@ -138,6 +142,26 @@ result = construct(data, spec)
 # {'app_name': 'MyApp', 'db_host': 'db1.example.com'}
 ```
 
+For complex scenarios, `FlexSpec` automatically chooses between path-based access and object instantiation, and supports nested dict/list structures in a single declaration:
+
+```python
+from structcast.core.specifier import FlexSpec
+
+data = {
+    "user": {"name": "Alice", "age": 30},
+    "settings": {"theme": "dark"},
+}
+
+# FlexSpec accepts dicts, lists, path strings, and ObjectSpec — all at once
+spec = FlexSpec.model_validate({
+    "profile": {"name": "user.name", "age": "user.age"},
+    "theme": "settings.theme",
+    "label": "constant: v1",
+})
+result = spec(data)
+# {'profile': {'name': 'Alice', 'age': 30}, 'theme': 'dark', 'label': 'v1'}
+```
+
 ### 3. Generate Config with Templates
 
 Embed Jinja2 templates directly in data structures:
@@ -236,6 +260,42 @@ result = construct({}, spec)  # Returns value of $HOME
 - `REFERENCE` — return direct reference (default)
 - `SHALLOW_COPY` — return a shallow copy
 - `DEEP_COPY` — return a deep copy
+
+**FlexSpec — unified specification:**
+
+`FlexSpec` is a flexible specification that automatically dispatches to `RawSpec` (path-based access) or `ObjectSpec` (instantiation) depending on the input, and recursively handles nested dict/list structures. It is ideal when a single spec needs to mix extraction paths, constants, and object construction:
+
+```python
+from structcast.core.specifier import FlexSpec
+
+data = {"metrics": {"cpu": 82.5, "mem": 64.1}, "host": "web-01"}
+
+# String → RawSpec path access
+assert FlexSpec.model_validate("host")(data) == "web-01"
+
+# Dict → nested FlexSpec producing a new structure
+spec = FlexSpec.model_validate({
+    "server": "host",
+    "readings": ["metrics.cpu", "metrics.mem"],
+    "static": "constant: OK",
+})
+assert spec(data) == {
+    "server": "web-01",
+    "readings": [82.5, 64.1],
+    "static": "OK",
+}
+
+# ObjectSpec inside FlexSpec — instantiate objects inline
+spec = FlexSpec.model_validate({
+    "sorter": {"_obj_": [{"_addr_": "sorted"}]},
+    "name": "host",
+})
+result = spec(data)
+assert result["sorter"] is sorted
+assert result["name"] == "web-01"
+```
+
+`FlexSpec` is fully serializable via Pydantic and round-trips through `model_dump()` / `model_validate()`.
 
 ### Template
 
@@ -407,6 +467,17 @@ Run any example directly:
 ```bash
 python examples/01_basic_instantiation.py
 ```
+
+### Advanced Examples
+
+These examples demonstrate **cross-module integration** — combining Instantiator,
+Specifier, and Template in realistic workflows:
+
+| Example                                                                   | Description                                                                                                          |
+| ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| [06_config_driven_pipeline.py](examples/06_config_driven_pipeline.py)     | Config-driven data pipeline: Specifier extracts fields, Instantiator builds a sorter, Template renders a report      |
+| [07_dynamic_service_registry.py](examples/07_dynamic_service_registry.py) | Service registry: Specifier reads service configs, Instantiator creates URI formatters, Template generates manifests |
+| [08_multi_stage_transform.py](examples/08_multi_stage_transform.py)       | Multi-stage sensor pipeline: FlexSpec `_pipe_` for type casting, Instantiator for math tools, Template for reports   |
 
 ---
 
