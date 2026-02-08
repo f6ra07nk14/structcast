@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+import uuid
 
 from structcast.utils.base import (
     check_elements,
@@ -64,7 +65,7 @@ class TestLoadYaml:
     def test_load_yaml_from_file(self) -> None:
         """Test loading yaml from a file."""
         # Use a file in the current directory (allowed by security settings)
-        test_file = Path("test_temp.yml")
+        test_file = Path(f"test_temp_{uuid.uuid4()}.yml")
         try:
             test_file.write_text("key: value\nlist:\n  - item1\n  - item2\n")
             result = load_yaml(test_file)
@@ -93,7 +94,7 @@ class TestDumpYaml:
     def test_dump_yaml_to_file(self) -> None:
         """Test dumping yaml to a file."""
         data = {"key": "value", "list": ["item1", "item2"]}
-        test_file = Path("test_dump_temp.yml")
+        test_file = Path(f"test_dump_temp_{uuid.uuid4()}.yml")
         try:
             # Create the file first so security check can resolve it
             test_file.touch()
