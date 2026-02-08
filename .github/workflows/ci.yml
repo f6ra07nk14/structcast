@@ -2,12 +2,12 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [ main, dev ]
+    branches: [main, dev]
     tags:
-      - 'v*'
+      - "v*"
   pull_request:
-    types: [ opened, synchronize, reopened, closed ]
-    branches: [ main, dev ]
+    types: [opened, synchronize, reopened, closed]
+    branches: [main, dev]
 
 env:
   REGISTRY: ghcr.io
@@ -24,9 +24,7 @@ jobs:
       contents: read
       packages: write
     outputs:
-      should-build: ${{ steps.should-build.outputs.build }}
-      image-tag: ${{ steps.determine-tag.outputs.tag }}
-
+      sanitized-branch: ${{ steps.branch-name.outputs.sanitized }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -61,7 +59,7 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             # For PRs, check changes between base and head
-            if git diff --name-only origin/${{ github.base_ref }}...${{ github.sha }} | grep -E '(Dockerfile|\.dockerignore|uv\.lock)'; then
+            if git diff --name-only origin/${{ github.base_ref }}...${{ github.sha }} | grep -E '(docker/|uv\.lock)'; then
               echo "changed=true" >> $GITHUB_OUTPUT
               echo "Docker files changed detected"
             else
@@ -71,7 +69,7 @@ jobs:
           else
             # For push events, check the latest commit
             if git rev-parse HEAD~1 >/dev/null 2>&1; then
-              if git diff --name-only HEAD~1 HEAD | grep -E '(Dockerfile|\.dockerignore|uv\.lock)'; then
+              if git diff --name-only HEAD~1 HEAD | grep -E '(docker/|uv\.lock)'; then
                 echo "changed=true" >> $GITHUB_OUTPUT
                 echo "Docker files changed detected"
               else
@@ -91,7 +89,7 @@ jobs:
           BRANCH_NAME="${{ steps.branch-name.outputs.sanitized }}"
           IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${BRANCH_NAME}-latest"
           echo "Checking for image: ${IMAGE_TAG}"
-          
+
           if docker pull "${IMAGE_TAG}" 2>/dev/null; then
             echo "exists=true" >> $GITHUB_OUTPUT
             echo "✓ Docker image ${IMAGE_TAG} exists"
@@ -105,69 +103,61 @@ jobs:
         run: |
           DOCKER_CHANGED="${{ steps.check-docker.outputs.changed }}"
           IMAGE_EXISTS="${{ steps.check-image.outputs.exists }}"
-          
+
           if [ "${DOCKER_CHANGED}" = "true" ] || [ "${IMAGE_EXISTS}" = "false" ]; then
-            echo "build=true" >> $GITHUB_OUTPUT
+            echo "build-needed=true" >> $GITHUB_OUTPUT
             echo "✓ Build required (Docker changed: ${DOCKER_CHANGED}, Image exists: ${IMAGE_EXISTS})"
           else
-            echo "build=false" >> $GITHUB_OUTPUT
+            echo "build-needed=false" >> $GITHUB_OUTPUT
             echo "✓ Build not required (Docker changed: ${DOCKER_CHANGED}, Image exists: ${IMAGE_EXISTS})"
           fi
 
       - name: Set up Docker Buildx
-        if: steps.should-build.outputs.build == 'true'
+        if: steps.should-build.outputs.build-needed == 'true' || steps.check-image.outputs.exists == 'false'
         uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=moby/buildkit:latest
 
       - name: Extract metadata for Docker
-        if: steps.should-build.outputs.build == 'true'
+        if: steps.should-build.outputs.build-needed == 'true' || steps.check-image.outputs.exists == 'false'
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=${{ steps.branch-name.outputs.sanitized }}-{{sha}}
-            type=raw,value=${{ steps.branch-name.outputs.sanitized }}-latest
-          flavor: |
-            latest=false
-          # Note: Using centralized sanitized branch-name output for consistent tagging
-          # {{sha}} is automatically truncated to 7 characters by the metadata action
+          tags: type=raw,value=${{ steps.branch-name.outputs.sanitized }}-latest
+          flavor: latest=false
 
       - name: Build and push Docker image
-        if: steps.should-build.outputs.build == 'true'
+        if: steps.should-build.outputs.build-needed == 'true' || steps.check-image.outputs.exists == 'false'
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: docker/dev.dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          build-args: |
+            PY_VERSION=3.13
+          cache-from: type=gha,scope=dev-image
+          cache-to: type=gha,mode=max,scope=dev-image
 
-      - name: Determine image tag to use
-        id: determine-tag
+      - name: Log build summary
         run: |
           BRANCH_NAME="${{ steps.branch-name.outputs.sanitized }}"
-          SHA="${{ github.sha }}"
-          
-          if [ "${{ steps.should-build.outputs.build }}" = "true" ]; then
-            # Use the newly built image with branch-sha tag
-            # The metadata action uses short SHA (7 chars) for {{sha}} template
-            # We truncate github.sha (40 chars) to match: ${SHA:0:7}
-            SHORT_SHA="${SHA:0:7}"
-            TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${BRANCH_NAME}-${SHORT_SHA}"
-          else
-            # Use the branch-latest tag if no build was needed
-            TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${BRANCH_NAME}-latest"
-          fi
-          echo "tag=${TAG}" >> $GITHUB_OUTPUT
-          echo "Using image tag: ${TAG}"
-          echo "Branch: ${BRANCH_NAME}, SHA: ${SHORT_SHA:-latest}"
+          BUILD_NEEDED="${{ steps.should-build.outputs.build-needed }}"
+
+          echo "=== Build Summary ==="
+          echo "Branch: ${BRANCH_NAME}"
+          echo "Build performed: ${BUILD_NEEDED}"
+          echo "Latest tag: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${BRANCH_NAME}-latest"
+          echo "======================"
 
       - name: Verify Docker image
         run: |
-          IMAGE_TAG="${{ steps.determine-tag.outputs.tag }}"
+          BRANCH_NAME="${{ steps.branch-name.outputs.sanitized }}"
+          IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${BRANCH_NAME}-latest"
+
           echo "Verifying image: ${IMAGE_TAG}"
-          
           if docker pull "${IMAGE_TAG}" 2>/dev/null; then
             echo "✓ Docker image exists and is accessible: ${IMAGE_TAG}"
           else
@@ -183,57 +173,25 @@ jobs:
       contents: read
       packages: read
     container:
-      image: ${{ needs.build-docker.outputs.image-tag }}
+      # Note: env context is not available in container.image, so we use github.repository directly
+      # Use sanitized branch name from build-docker job output to match built image tags
+      image: ghcr.io/${{ github.repository }}:${{ needs.build-docker.outputs.sanitized-branch }}-latest
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-
+      options: --user root
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Run code quality checks
-        id: quality-checks
+      - name: Run tox for all environments
         run: |
-          echo "Running code quality checks"
-          
-          # Check code formatting
-          echo "Checking code formatting with ruff..."
-          ruff format --check src/ tests/
-          
-          # Run linting
-          echo "Running linting with ruff..."
-          ruff check src/ tests/
-          
-          # Run type checking
-          echo "Running type checking with mypy..."
-          mypy src/ tests/
-
-      - name: Run pytest
-        id: run-tests
-        run: |
-          echo "Running tests"
+          echo "=== Running all tox environments ==="
           export PYTHONPATH="$(pwd)/src"
-          pytest tests/ -v --tb=short
-
-      - name: Test summary
-        if: always()
-        run: |
-          QUALITY_STATUS="${{ steps.quality-checks.outcome }}"
-          TEST_STATUS="${{ steps.run-tests.outcome }}"
-          
-          echo "=== Test Results Summary ==="
-          echo "Code Quality Checks: ${QUALITY_STATUS}"
-          echo "Pytest Tests: ${TEST_STATUS}"
-          
-          if [ "${QUALITY_STATUS}" = "success" ] && [ "${TEST_STATUS}" = "success" ]; then
-            echo "✓ All checks passed successfully"
-          else
-            echo "✗ Some checks failed"
-            [ "${QUALITY_STATUS}" != "success" ] && echo "  - Code quality checks failed"
-            [ "${TEST_STATUS}" != "success" ] && echo "  - Tests failed"
-            exit 1
-          fi
+          export HOME="$(pwd)"
+          # Ensure UV uses the pre-populated cache from Docker image
+          export XDG_CACHE_HOME=/app/.cache
+          tox run-parallel --parallel all
 
   # Cleanup Job: Delete Docker images for feature branches after successful PR merge
   cleanup-images:
@@ -241,7 +199,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       packages: write
-    
     steps:
       - name: Determine branch name
         id: branch-name
@@ -251,7 +208,7 @@ jobs:
           SANITIZED_BRANCH_NAME="${BRANCH_NAME//\//-}"
           echo "sanitized=${SANITIZED_BRANCH_NAME}" >> $GITHUB_OUTPUT
           echo "Branch: ${BRANCH_NAME} (sanitized: ${SANITIZED_BRANCH_NAME})"
-          
+
           # Check if this is a feature branch (not dev or main)
           if [ "${BRANCH_NAME}" != "dev" ] && [ "${BRANCH_NAME}" != "main" ]; then
             echo "is_feature_branch=true" >> $GITHUB_OUTPUT
@@ -267,21 +224,21 @@ jobs:
           BRANCH_NAME="${{ steps.branch-name.outputs.sanitized }}"
           REPO_OWNER="${{ github.repository_owner }}"
           REPO_NAME="${{ github.event.repository.name }}"
-          
+
           echo "Cleaning up Docker images for feature branch: ${BRANCH_NAME}"
-          
+
           # Get package versions for this branch
           PACKAGE_URL="https://api.github.com/users/${REPO_OWNER}/packages/container/${REPO_NAME}/versions"
-          
+
           # Use GitHub CLI to list and delete images
-          # Delete both -latest and -sha tagged images for this branch
-          echo "Searching for images with tags matching: ${BRANCH_NAME}-*"
-          
+          # Delete -latest tagged images for this branch
+          echo "Searching for images with tags matching: ${BRANCH_NAME}-latest"
+
           # Get all versions
           VERSIONS=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
                           -H "Accept: application/vnd.github+json" \
-                          "${PACKAGE_URL}" | jq -r '.[] | select(.metadata.container.tags[] | startswith("'${BRANCH_NAME}'-")) | .id')
-          
+                          "${PACKAGE_URL}" | jq -r '.[] | select(.metadata.container.tags[] | test("^'${BRANCH_NAME}'-latest$")) | .id')
+
           if [ -z "$VERSIONS" ]; then
             echo "No images found for branch ${BRANCH_NAME}"
           else
@@ -313,19 +270,19 @@ jobs:
         run: |
           REPO_OWNER="${{ github.repository_owner }}"
           REPO_NAME="${{ github.event.repository.name }}"
-          
+
           echo "Cleaning up untagged Docker images"
-          
+
           # Get package versions for this repository
           PACKAGE_URL="https://api.github.com/users/${REPO_OWNER}/packages/container/${REPO_NAME}/versions"
-          
+
           # Find all untagged versions (versions with empty tags array)
           echo "Searching for untagged images..."
-          
+
           UNTAGGED_VERSIONS=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
                                    -H "Accept: application/vnd.github+json" \
                                    "${PACKAGE_URL}" | jq -r '.[] | select(.metadata.container.tags | length == 0) | .id')
-          
+
           if [ -z "$UNTAGGED_VERSIONS" ]; then
             echo "No untagged images found"
           else
@@ -353,7 +310,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    
     steps:
       - name: Determine branch name
         id: branch-name
@@ -361,7 +317,7 @@ jobs:
           BRANCH_NAME="${{ github.head_ref }}"
           echo "name=${BRANCH_NAME}" >> $GITHUB_OUTPUT
           echo "Branch: ${BRANCH_NAME}"
-          
+
           # Check if this is a feature branch (not dev or main)
           if [ "${BRANCH_NAME}" != "dev" ] && [ "${BRANCH_NAME}" != "main" ]; then
             echo "is_feature_branch=true" >> $GITHUB_OUTPUT
@@ -376,15 +332,15 @@ jobs:
         run: |
           BRANCH_NAME="${{ steps.branch-name.outputs.name }}"
           REPO="${{ github.repository }}"
-          
+
           echo "Deleting branch: ${BRANCH_NAME}"
-          
+
           # Delete the branch using GitHub API
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
                -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
                -H "Accept: application/vnd.github+json" \
                "https://api.github.com/repos/${REPO}/git/refs/heads/${BRANCH_NAME}")
-          
+
           if [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "200" ]; then
             echo "✓ Successfully deleted branch: ${BRANCH_NAME} (HTTP ${HTTP_CODE})"
           else
@@ -402,7 +358,6 @@ jobs:
       packages: write
       pull-requests: write
       issues: write
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -413,7 +368,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
 
       - name: Install semantic-release
         run: |
@@ -492,4 +447,3 @@ jobs:
           else
             echo "Dev branch does not exist, skipping back-merge"
           fi
-
