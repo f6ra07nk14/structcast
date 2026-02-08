@@ -159,7 +159,7 @@
     [
       "@semantic-release/exec",
       {
-        "prepareCmd": "uv build && test -d dist && test -n \"$(ls -A dist)\""
+        "prepareCmd": "uv sync && uv build && test -d dist && test -n \"$(ls -A dist)\""
       }
     ],
     [
@@ -168,6 +168,7 @@
         "assets": [
           "CHANGELOG.md",
           "pyproject.toml",
+          "uv.lock",
           "src/structcast/__init__.py"
         ],
         "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
