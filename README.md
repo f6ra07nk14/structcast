@@ -1,14 +1,29 @@
 # StructCast
 
-**Elegantly orchestrating structured data via a flexible and serializable workflow.**
+**Declarative data orchestration — from configuration to live objects, safely.**
 
-StructCast is a Python library for declaratively constructing, accessing, transforming, and templating structured data. It turns plain configuration (dicts, YAML, JSON) into live Python objects, extracts and reshapes nested data via path-based specifications, and generates dynamic configuration through Jinja2 templates — all with a built-in security layer that prevents code injection and unsafe operations.
+StructCast is a Python library that bridges the gap between static configuration and runtime behavior. Define your data pipelines, object construction, and dynamic templates in plain YAML or JSON, and let StructCast turn them into live Python objects — with security built in from the ground up.
+
+---
+
+## Why StructCast?
+
+Modern applications often rely on deeply nested configuration to control everything from database connections to ML pipeline parameters. Managing this configuration typically involves ad-hoc parsing code, fragile string interpolation, or heavyweight frameworks that impose their own CLI and project structure.
+
+StructCast was designed to solve three recurring challenges:
+
+1. **Configuration-driven object construction** — Instantiate arbitrary Python objects from serializable dict/list patterns, without writing boilerplate factory code or coupling your application to a specific framework.
+2. **Nested data extraction and restructuring** — Navigate complex data hierarchies with concise dot-notation paths and reshape results into the exact structure your application expects.
+3. **Dynamic configuration generation** — Embed Jinja2 templates directly inside data structures, enabling conditional logic, loops, and runtime variable injection while keeping everything serializable and auditable.
+
+All of this runs through a **sandboxed security layer** that validates imports, blocks dangerous attributes, and prevents code injection — so configurations can be safely loaded from external sources.
 
 ---
 
 ## Table of Contents
 
 - [StructCast](#structcast)
+  - [Why StructCast?](#why-structcast)
   - [Table of Contents](#table-of-contents)
   - [Key Features](#key-features)
   - [Installation](#installation)
@@ -25,6 +40,10 @@ StructCast is a Python library for declaratively constructing, accessing, transf
     - [Template](#template)
     - [Security](#security)
     - [Utilities](#utilities)
+  - [Advanced Patterns](#advanced-patterns)
+    - [`extend_structure` — Embedding Templates in Data](#extend_structure--embedding-templates-in-data)
+    - [Chained FlexSpec](#chained-flexspec)
+    - [End-to-End Integration Workflow](#end-to-end-integration-workflow)
   - [Comparison with Hydra and glom](#comparison-with-hydra-and-glom)
     - [StructCast vs Hydra](#structcast-vs-hydra)
     - [StructCast vs glom](#structcast-vs-glom)
@@ -38,17 +57,17 @@ StructCast is a Python library for declaratively constructing, accessing, transf
 
 ## Key Features
 
-| Feature                         | Description                                                                               |
-| ------------------------------- | ----------------------------------------------------------------------------------------- |
-| **Pattern-based instantiation** | Build live Python objects from plain dict/list patterns (`_addr_`, `_call_`, `_bind_`, …) |
-| **Path-based data access**      | Navigate nested data with dot-notation strings (`"a.b.0.c"`)                              |
-| **Custom resolvers**            | Register domain-specific spec resolvers for extensible data extraction                    |
-| **Jinja2 templating**           | Embed Jinja templates in data structures with YAML/JSON auto-parsing                      |
-| **Sandboxed execution**         | All templates run in `ImmutableSandboxedEnvironment` by default                           |
-| **Security layer**              | Module blocklist/allowlist, attribute validation, path traversal protection               |
-| **YAML-native**                 | First-class YAML loading/dumping via `ruamel.yaml` with security checks                   |
-| **Pydantic integration**        | Patterns and specs are validated as Pydantic models at parse time                         |
-| **Serializable**                | Every pattern is a plain dict/list — store in YAML, JSON, or databases                    |
+| Feature                         | Description                                                                                     |
+| ------------------------------- | ----------------------------------------------------------------------------------------------- |
+| **Pattern-based instantiation** | Build live Python objects from plain dict/list patterns (`_addr_`, `_call_`, `_bind_`, `_obj_`) |
+| **Path-based data access**      | Navigate nested data with dot-notation strings (`"a.b.0.c"`)                                    |
+| **Custom resolvers**            | Register domain-specific spec resolvers for extensible data extraction                          |
+| **Jinja2 templating**           | Embed Jinja templates in data structures with YAML/JSON auto-parsing                            |
+| **Sandboxed execution**         | All templates run in `ImmutableSandboxedEnvironment` by default                                 |
+| **Security layer**              | Module blocklist/allowlist, attribute validation, path traversal protection                     |
+| **YAML-native**                 | First-class YAML loading/dumping via `ruamel.yaml` with security checks                         |
+| **Pydantic integration**        | Patterns and specs are validated as Pydantic models at parse time                               |
+| **Serializable**                | Every pattern is a plain dict/list — store in YAML, JSON, or databases                          |
 
 ---
 
@@ -99,9 +118,11 @@ pip install -e ".[dev]"
 
 ## Quick Start
 
+The following three examples cover StructCast's core capabilities. Each builds on the previous one — start here to get a working understanding of the library in minutes.
+
 ### 1. Instantiate Objects from Config
 
-Use declarative dict patterns to import and call Python objects:
+Use declarative dict patterns to import and call any Python callable — classes, functions, or methods — without writing import or factory code:
 
 ```python
 from structcast.core.instantiator import instantiate
@@ -121,7 +142,7 @@ Patterns are composable: chain `_addr_` (import) → `_attr_` (attribute access)
 
 ### 2. Access Nested Data with Specifiers
 
-Extract and restructure nested data using dot-notation paths:
+Use dot-notation path strings to reach into deeply nested data and reshape it into the structure your application expects:
 
 ```python
 from structcast.core.specifier import convert_spec, construct
@@ -164,7 +185,7 @@ result = spec(data)
 
 ### 3. Generate Config with Templates
 
-Embed Jinja2 templates directly in data structures:
+Embed Jinja2 templates directly inside data structures to generate configuration dynamically at runtime. Templates are rendered in a sandboxed environment by default:
 
 ```python
 from structcast.core.template import JinjaTemplate, extend_structure
@@ -195,9 +216,11 @@ print(result["farewell"])   # Goodbye Alice!
 
 ## Core Modules
 
+StructCast is organized around five modules, each responsible for one aspect of the data orchestration pipeline. They can be used independently or composed together for complex workflows.
+
 ### Instantiator
 
-The instantiator converts declarative config patterns into live Python objects. Each pattern is a plain dict (or list) with a sentinel key:
+The Instantiator converts declarative config patterns into live Python objects. Each pattern is a plain dict (or list) with a sentinel key that tells StructCast what operation to perform:
 
 | Pattern              | Alias    | Purpose                                                       |
 | -------------------- | -------- | ------------------------------------------------------------- |
@@ -205,9 +228,11 @@ The instantiator converts declarative config patterns into live Python objects. 
 | **AttributePattern** | `_attr_` | Access an attribute on the current object                     |
 | **CallPattern**      | `_call_` | Call the current callable (dict → `**kwargs`, list → `*args`) |
 | **BindPattern**      | `_bind_` | Partially apply arguments (`functools.partial`)               |
-| **ObjectPattern**    | `_obj_`  | Chain multiple patterns into one build sequence               |
+| **ObjectPattern**    | `_obj_`  | Chain multiple patterns into a single build sequence          |
 
 **Example — partial application:**
+
+Patterns are composable. The following example chains `_addr_` (import) and `_bind_` (partial application) to build a reusable converter:
 
 ```python
 from structcast.core.instantiator import instantiate
@@ -223,11 +248,11 @@ hex_to_int = instantiate(pattern)
 assert hex_to_int("FF") == 255
 ```
 
-The `instantiate()` function recursively walks any nested dict/list, detecting and executing patterns wherever they appear. Non-pattern values pass through unchanged.
+The `instantiate()` function recursively walks any nested dict/list, detecting and executing patterns wherever they appear. Non-pattern values pass through unchanged, making it safe to call on mixed data structures.
 
 ### Specifier
 
-The specifier module provides a three-phase process for data access:
+The Specifier module provides a three-phase process for extracting and reshaping data:
 
 1. **Convert** — Parse configuration strings into intermediate spec objects
 2. **Access** — Navigate into data using path tuples `("a", "b", 0, "c")`
@@ -263,7 +288,7 @@ result = construct({}, spec)  # Returns value of $HOME
 
 **FlexSpec — unified specification:**
 
-`FlexSpec` is a flexible specification that automatically dispatches to `RawSpec` (path-based access) or `ObjectSpec` (instantiation) depending on the input, and recursively handles nested dict/list structures. It is ideal when a single spec needs to mix extraction paths, constants, and object construction:
+`FlexSpec` is the recommended entry point for most use cases. It automatically dispatches to `RawSpec` (path-based access) or `ObjectSpec` (instantiation) depending on the input, and recursively handles nested dict/list structures. Use `FlexSpec` when a single spec needs to mix extraction paths, constants, and object construction:
 
 ```python
 from structcast.core.specifier import FlexSpec
@@ -299,7 +324,7 @@ assert result["name"] == "web-01"
 
 ### Template
 
-The template module integrates Jinja2 into data structures with three template types:
+The Template module integrates Jinja2 into data structures, enabling dynamic configuration generation. Three template types correspond to different output formats:
 
 | Template            | Alias          | Output                       |
 | ------------------- | -------------- | ---------------------------- |
@@ -335,13 +360,72 @@ result = template(host="0.0.0.0", port=8080, features=["logging", "caching"])
 # result = {'server': {'host': '0.0.0.0', 'port': 8080, 'logging': True, 'caching': True}}
 ```
 
+**`extend_structure` — recursive template expansion:**
+
+While standalone template models render individual values, `extend_structure` is designed for bulk operations: it recursively walks an entire data structure and resolves all embedded `_jinja_yaml_`, `_jinja_json_`, and `_jinja_` templates in place. Template variables are organized by named **template groups**:
+
+```python
+expanded = extend_structure(
+    data,
+    template_kwargs={"default": {"user": "Alice", "debug": True}},
+)
+```
+
+The `"default"` group is used unless a template specifies `_jinja_group_` to select a different group. This allows different parts of a config tree to receive different sets of variables.
+
+`_jinja_yaml_` can appear in two structural contexts, each with distinct merge behavior:
+
+**Mapping pattern** — When `_jinja_yaml_` is a key inside a dict alongside static keys, its rendered output (must produce a YAML mapping) is **merged** into the parent dict:
+
+```yaml
+server:
+  host: 0.0.0.0
+  port: 8080
+  _jinja_yaml_: |
+    workers: {{ num_workers }}
+    debug: {{ debug_mode }}
+```
+
+After `extend_structure`, this becomes:
+
+```python
+{"server": {"host": "0.0.0.0", "port": 8080, "workers": 4, "debug": True}}
+```
+
+Static keys and dynamically generated keys coexist in the same mapping.
+
+**Sequence pattern** — When a `{"_jinja_yaml_": ...}` item appears inside a list, its rendered output (must produce a YAML sequence) is **spliced** into the parent list at that position:
+
+```yaml
+steps:
+  - name: init
+  - _jinja_yaml_: |
+      {% for check in checks %}
+      - name: "validate_{{ check }}"
+      {% endfor %}
+  - name: finalize
+```
+
+After `extend_structure` with `checks=["email", "age"]`, the list becomes:
+
+```python
+[
+    {"name": "init"},
+    {"name": "validate_email"},
+    {"name": "validate_age"},
+    {"name": "finalize"},
+]
+```
+
+Both patterns can coexist in a single config tree and are resolved recursively. See [Advanced Patterns](#advanced-patterns) for full integration examples.
+
 ### Security
 
-StructCast includes a comprehensive security layer that guards all dynamic operations:
+StructCast includes a comprehensive security layer that guards all dynamic operations. Since configurations may be loaded from external or untrusted sources, every import, attribute access, and file path is validated before execution:
 
-- **Module blocklist** — blocks dangerous modules (`os`, `subprocess`, `sys`, `pickle`, `socket`, …)
+- **Module blocklist** — blocks dangerous modules (`os`, `subprocess`, `sys`, `pickle`, `socket`, and more)
 - **Module allowlist** — only permits known-safe builtins and standard library modules
-- **Attribute validation** — blocks dangerous dunder methods (`__subclasses__`, `__globals__`, `__code__`, …)
+- **Attribute validation** — blocks dangerous dunder methods (`__subclasses__`, `__globals__`, `__code__`, and more)
 - **Protected/private member checks** — optionally block `_protected` and `__private` members
 - **Path security** — prevents hidden directory access and path traversal attacks
 - **Recursion limits** — maximum depth (100) and timeout (30s) for all recursive operations
@@ -359,23 +443,172 @@ configure_security(
 
 ### Utilities
 
-The `utils.base` module provides helper functions used across the library:
+The `utils.base` module provides helper functions used throughout the library and available for direct use in application code:
 
-| Function                      | Purpose                                                 |
-| ----------------------------- | ------------------------------------------------------- |
-| `check_elements(x)`           | Normalize `None` / single / tuple / set → list          |
-| `import_from_address(addr)`   | Security-checked dynamic import                         |
-| `load_yaml(path)`             | Load YAML with path validation                          |
-| `load_yaml_from_string(s)`    | Parse YAML from a string                                |
-| `dump_yaml(data, path)`       | Write YAML with path validation                         |
-| `dump_yaml_to_string(data)`   | Serialize data to YAML string                           |
-| `unroll_call(value, call=fn)` | Call `fn` with smart unpacking (dict→kwargs, list→args) |
+| Function                    | Purpose                         |
+| --------------------------- | ------------------------------- |
+| `import_from_address(addr)` | Security-checked dynamic import |
+| `load_yaml(path)`           | Load YAML with path validation  |
+| `load_yaml_from_string(s)`  | Parse YAML from a string        |
+| `dump_yaml(data, path)`     | Write YAML with path validation |
+| `dump_yaml_to_string(data)` | Serialize data to YAML string   |
+
+---
+
+## Advanced Patterns
+
+The advanced examples (06–08) combine multiple StructCast modules into end-to-end workflows. This section documents the key patterns they rely on, so you can apply them in your own projects.
+
+### `extend_structure` — Embedding Templates in Data
+
+The [mapping and sequence patterns](#template) described above are the foundation of dynamic configuration. The following example combines both patterns in a single config:
+
+```python
+from structcast.core.template import extend_structure
+from structcast.utils.base import load_yaml_from_string
+
+config_yaml = """\
+pipeline:
+  name: DataProcessor
+
+  # Mapping pattern: merge dynamic settings into a static dict
+  settings:
+    output_format: json
+    _jinja_yaml_: |
+      batch_size: {{ batch_size }}
+      retry: {{ retry }}
+
+  # Sequence pattern: splice dynamic steps into a static list
+  steps:
+    - name: load
+    - _jinja_yaml_: |
+        {%- for t in transforms %}
+        - name: "{{ t }}"
+        {%- endfor %}
+    - name: save
+"""
+
+raw = load_yaml_from_string(config_yaml)
+expanded = extend_structure(
+    raw,
+    template_kwargs={"default": {
+        "batch_size": 64,
+        "retry": True,
+        "transforms": ["normalize", "deduplicate"],
+    }},
+)
+
+# settings: {output_format: json, batch_size: 64, retry: True}
+# steps: [{name: load}, {name: normalize}, {name: deduplicate}, {name: save}]
+```
+
+### Chained FlexSpec
+
+A powerful pattern used throughout the advanced examples is **two-stage FlexSpec**: one `FlexSpec` extracts configuration metadata (including path strings), and a second `FlexSpec` uses those extracted paths as its spec against a different data source. This enables fully config-driven data extraction without hardcoding any paths in application code:
+
+```python
+from structcast.core.specifier import FlexSpec
+
+# Step 1: Config defines extraction paths
+config = {
+    "extraction": {
+        "temperature": "sensors.temp",
+        "humidity": "sensors.hum",
+    }
+}
+
+# FlexSpec reads the config to get the extraction paths
+config_spec = FlexSpec.model_validate({"paths": "extraction"})
+cfg = config_spec(config)
+# cfg["paths"] = {"temperature": "sensors.temp", "humidity": "sensors.hum"}
+
+# Step 2: Feed the extracted paths as a NEW FlexSpec against raw device data
+raw_data = {"sensors": {"temp": 22.5, "hum": 68.0}}
+data_spec = FlexSpec.model_validate(dict(cfg["paths"]))
+readings = data_spec(raw_data)
+# readings = {"temperature": 22.5, "humidity": 68.0}
+```
+
+This pattern appears in examples 06 and 07: the YAML config contains FlexSpec-compatible path strings that become specs for navigating raw payloads at runtime.
+
+The `"constant: value"` resolver is particularly useful in this context — it allows config-defined specs to include literal values alongside path-based lookups:
+
+```python
+# In YAML config (after _jinja_yaml_ expansion)
+# tenants:
+#   acme:
+#     label: "constant: Acme Corp"
+#     transactions: "warehouse.acme.txns"
+
+tenant_spec = FlexSpec.model_validate({
+    "label": "constant: Acme Corp",
+    "transactions": "warehouse.acme.txns",
+})
+result = tenant_spec(warehouse_data)
+# result["label"] = "Acme Corp" (literal)
+# result["transactions"] = <data from warehouse.acme.txns>
+```
+
+### End-to-End Integration Workflow
+
+The advanced examples follow a consistent multi-phase pipeline that chains all core modules together. Understanding this flow is key to building your own StructCast-powered applications:
+
+```text
+YAML config → load_yaml_from_string → extend_structure → FlexSpec → instantiate → process → JinjaTemplate
+```
+
+| Phase       | Module                  | Purpose                                                                       |
+| ----------- | ----------------------- | ----------------------------------------------------------------------------- |
+| **Define**  | —                       | Write YAML config with embedded `_jinja_yaml_` templates and `_obj_` patterns |
+| **Load**    | `load_yaml_from_string` | Parse YAML into Python dicts                                                  |
+| **Expand**  | `extend_structure`      | Resolve all `_jinja_yaml_` templates with runtime parameters                  |
+| **Extract** | `FlexSpec`              | Read the expanded config to pull out relevant sections                        |
+| **Build**   | `instantiate`           | Construct live Python objects from `_obj_` patterns found in config           |
+| **Process** | (your code)             | Apply instantiated tools to extracted data                                    |
+| **Report**  | `JinjaTemplate`         | Render a final human-readable output                                          |
+
+```python
+# Typical integration skeleton
+from structcast.core.instantiator import instantiate
+from structcast.core.specifier import FlexSpec
+from structcast.core.template import JinjaTemplate, extend_structure
+from structcast.utils.base import load_yaml_from_string
+
+# 1. Load YAML config
+raw = load_yaml_from_string(yaml_string)
+
+# 2. Expand _jinja_yaml_ templates with runtime params
+expanded = extend_structure(raw, template_kwargs={"default": runtime_params})
+
+# 3. Extract config sections with FlexSpec
+spec = FlexSpec.model_validate({
+    "tool": "config.processor",
+    "paths": "config.extraction_paths",
+    "report_tpl": "config.report_template",
+})
+cfg = spec(expanded)
+
+# 4. Build tools from _obj_ patterns in config
+tool = instantiate(dict(cfg["tool"]))
+
+# 5. Chained FlexSpec: use config-defined paths to extract from raw data
+data_spec = FlexSpec.model_validate(dict(cfg["paths"]))
+extracted = data_spec(raw_payload)
+
+# 6. Process data with instantiated tool
+result = {k: tool(v) for k, v in extracted.items()}
+
+# 7. Render report
+report = JinjaTemplate.model_validate({"_jinja_": cfg["report_tpl"]})(data=result)
+```
+
+See the [Advanced Examples](#advanced-examples) for complete, runnable implementations of this workflow.
 
 ---
 
 ## Comparison with Hydra and glom
 
-StructCast shares design philosophies with both [Hydra](https://hydra.cc/) (by Facebook Research) and [glom](https://glom.readthedocs.io/), but occupies a distinct niche. The table and discussion below highlight the similarities and differences.
+StructCast shares design philosophies with both [Hydra](https://hydra.cc/) (by Facebook Research) and [glom](https://glom.readthedocs.io/), but occupies a distinct niche as a **composable library** rather than a full framework. The following comparison highlights when each tool is the right choice.
 
 ### StructCast vs Hydra
 
@@ -452,7 +685,7 @@ StructCast shares design philosophies with both [Hydra](https://hydra.cc/) (by F
 
 ## Examples
 
-Full runnable examples are in the [`examples/`](examples/) directory:
+Full runnable examples are in the [`examples/`](examples/) directory. They are ordered by complexity — start with 01 for fundamentals, then progress to the advanced integration examples:
 
 | Example                                                               | Description                                                                        |
 | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
@@ -470,14 +703,13 @@ python examples/01_basic_instantiation.py
 
 ### Advanced Examples
 
-These examples demonstrate **cross-module integration** — combining Instantiator,
-Specifier, and Template in realistic workflows:
+These examples demonstrate **cross-module integration** — combining `load_yaml_from_string`, `extend_structure`, `FlexSpec`, `instantiate`, and `JinjaTemplate` in realistic workflows. Each one builds a complete data pipeline where YAML configs with embedded `_jinja_yaml_` templates are expanded, extracted, processed, and rendered at runtime:
 
-| Example                                                                   | Description                                                                                                          |
-| ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| [06_config_driven_pipeline.py](examples/06_config_driven_pipeline.py)     | Config-driven data pipeline: Specifier extracts fields, Instantiator builds a sorter, Template renders a report      |
-| [07_dynamic_service_registry.py](examples/07_dynamic_service_registry.py) | Service registry: Specifier reads service configs, Instantiator creates URI formatters, Template generates manifests |
-| [08_multi_stage_transform.py](examples/08_multi_stage_transform.py)       | Multi-stage sensor pipeline: FlexSpec `_pipe_` for type casting, Instantiator for math tools, Template for reports   |
+| Example                                                               | Description                                                                                                                   |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| [06_sensor_dashboard.py](examples/06_sensor_dashboard.py)             | **Mapping pattern**: `_jinja_yaml_` merges dynamic sensor paths, thresholds, and Instantiator patterns into static config     |
+| [07_validation_pipeline.py](examples/07_validation_pipeline.py)       | **List pattern**: `_jinja_yaml_` splices dynamic validation steps into a static pipeline; mapping pattern for output settings |
+| [08_multi_tenant_analytics.py](examples/08_multi_tenant_analytics.py) | **Both patterns**: mapping generates per-tenant FlexSpec specs; list splices aggregation tools; per-tenant data processing    |
 
 ---
 
