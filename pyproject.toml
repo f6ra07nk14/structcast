@@ -4,12 +4,50 @@ version = "0.0.0"
 description = "Elegantly orchestrating structured data via a flexible and serializable workflow."
 readme = "README.md"
 requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "KCH", email = "f6ra07nk14@gmail.com" },
+]
+keywords = [
+    "structured-data",
+    "configuration",
+    "instantiation",
+    "yaml",
+    "jinja2",
+    "pydantic",
+    "data-access",
+    "templating",
+    "serialization",
+    "security",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Utilities",
+    "Typing :: Typed",
+]
 dependencies = [
     "jinja2>=3.1.6",
     "pydantic>=2.11.0",
     "ruamel-yaml[jinja2]>=0.19.1",
     "typing-extensions>=4.15.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/f6ra07nk14/structcast"
+Repository = "https://github.com/f6ra07nk14/structcast"
+Issues = "https://github.com/f6ra07nk14/structcast/issues"
+Changelog = "https://github.com/f6ra07nk14/structcast/blob/main/CHANGELOG.md"
 
 [dependency-groups]
 dev = ["mypy>=1.19.1", "pytest>=8.4.2", "pytest-cov>=7.0.0", "ruff>=0.14.14"]
