@@ -6,9 +6,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
 license-files = ["LICENSE"]
-authors = [
-    { name = "KCH", email = "f6ra07nk14@gmail.com" },
-]
+authors = [{ name = "KCH", email = "f6ra07nk14@gmail.com" }]
 keywords = [
     "structured-data",
     "configuration",
@@ -36,12 +34,7 @@ classifiers = [
     "Topic :: Utilities",
     "Typing :: Typed",
 ]
-dependencies = [
-    "jinja2>=3.1.6",
-    "pydantic>=2.11.0",
-    "ruamel-yaml[jinja2]>=0.19.1",
-    "typing-extensions>=4.15.0",
-]
+dependencies = ["jinja2>=3.1.6", "pydantic>=2.11.0", "ruamel-yaml[jinja2]>=0.19.1", "typing-extensions>=4.15.0"]
 
 [project.urls]
 Homepage = "https://github.com/f6ra07nk14/structcast"
@@ -125,81 +118,6 @@ max-branches = 15
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
-
-[tool.tox]
-requires = ["tox>=4", "tox-uv>=1.0.0"]
-env_list = [
-    "py{39,310,311,312,313}-pydantic{2110,2111,2112,2113,2114,2115,2116,2117,2118,2119,21110,2120,2121,2122,2123,2124,2125}",
-    "lint",
-    "type-check",
-]
-
-[tool.tox.env_run_base]
-package = "editable"
-wheel_build_env = ".pkg"
-runner = "uv-venv-lock-runner"
-deps = [
-    "pytest>=8.4.2",
-    "pytest-cov>=7.0.0",
-    "pydantic2110: pydantic>=2.11.0,<2.11.1",
-    "pydantic2111: pydantic>=2.11.1,<2.11.2",
-    "pydantic2112: pydantic>=2.11.2,<2.11.3",
-    "pydantic2113: pydantic>=2.11.3,<2.11.4",
-    "pydantic2114: pydantic>=2.11.4,<2.11.5",
-    "pydantic2115: pydantic>=2.11.5,<2.11.6",
-    "pydantic2116: pydantic>=2.11.6,<2.11.7",
-    "pydantic2117: pydantic>=2.11.7,<2.11.8",
-    "pydantic2118: pydantic>=2.11.8,<2.11.9",
-    "pydantic2119: pydantic>=2.11.9,<2.11.10",
-    "pydantic21110: pydantic>=2.11.10,<2.11.11",
-    "pydantic2120: pydantic>=2.12.0,<2.12.1",
-    "pydantic2121: pydantic>=2.12.1,<2.12.2",
-    "pydantic2122: pydantic>=2.12.2,<2.12.3",
-    "pydantic2123: pydantic>=2.12.3,<2.12.4",
-    "pydantic2124: pydantic>=2.12.4,<2.12.5",
-    "pydantic2125: pydantic>=2.12.5,<2.12.6",
-]
-commands = [["pytest", "{posargs}"]]
-
-[tool.tox.env.lint]
-skip_install = false
-deps = ["ruff>=0.14.14"]
-commands = [
-    ["ruff", "format", "--check", "src", "tests"],
-    ["ruff", "check", "src", "tests"],
-]
-
-[tool.tox.env.format]
-skip_install = false
-deps = ["ruff>=0.14.14"]
-commands = [["ruff", "format", "src", "tests"]]
-
-[tool.tox.env.type-check]
-skip_install = false
-deps = ["mypy>=1.19.1", "pydantic>=2.11.0"]
-commands = [["mypy", "src"], ["mypy", "tests"]]
-
-[tool.tox.env."type-check-py{39,310,311,312,313}"]
-skip_install = false
-deps = ["mypy>=1.19.1", "pydantic>=2.11.0"]
-commands = [["mypy", "src"], ["mypy", "tests"]]
-
-[tool.tox.env.all-checks]
-skip_install = false
-deps = [
-    "pytest>=8.4.2",
-    "pytest-cov>=7.0.0",
-    "mypy>=1.19.1",
-    "ruff>=0.14.14",
-    "pydantic>=2.11.0",
-]
-commands = [
-    ["pytest"],
-    ["mypy", "src"],
-    ["mypy", "tests"],
-    ["ruff", "format", "--check", "src", "tests"],
-    ["ruff", "check", "src", "tests"],
-]
 
 [build-system]
 requires = ["hatchling >= 1.26"]
