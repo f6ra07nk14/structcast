@@ -73,26 +73,24 @@ _accessers: list[tuple[type, Callable[[Any, Union[str, int]], tuple[bool, Any]]]
 """Registered accessers for data access."""
 
 
-def register_resolver(name: str, resolver: Callable[[str], Any]) -> None:
+def register_resolver(name: str, resolver: Callable[[str], Any]) -> str:
     """Register a resolver for specification conversion.
 
     Args:
         name (str): The name of the resolver.
         resolver (Callable[[str], Any]): The resolver function that takes a string and returns a resolved value.
 
+    Returns:
+        str: The specification identifier for the registered resolver.
+
     Raises:
         ValueError: If the resolver name is already registered.
     """
     if name in _resolvers:
         raise ValueError(f"Resolver '{name}' is already registered.")
-    _resolvers[name] = SPEC_FORMAT.format(resolver=name), resolver
-
-
-register_resolver("constant", lambda x: x)
-register_resolver("skip", lambda _: SPEC_FORMAT.format(resolver="skip"))
-
-SPEC_CONSTANT = _resolvers["constant"][0]
-SPEC_SKIP = _resolvers["skip"][0]
+    spec_id = SPEC_FORMAT.format(resolver=name)
+    _resolvers[name] = spec_id, resolver
+    return spec_id
 
 
 def register_accesser(data_type: type, accesser: Callable[[Any, Union[str, int]], tuple[bool, Any]]) -> None:
@@ -178,6 +176,11 @@ class SpecIntermediate:
             return cls(identifier=SPEC_SOURCE, value=split_attribute(raw))
         except ValueError as e:
             raise SpecError(f"Invalid specification format: {raw}") from e
+
+
+SPEC_CONSTANT = register_resolver("constant", lambda x: x)
+SPEC_SKIP: str = register_resolver("skip", lambda _: SPEC_SKIP)
+SPEC_PLACEHOLDER = register_resolver("placeholder", lambda x: SpecIntermediate.convert_spec(x or "skip:"))
 
 
 def convert_spec(cfg: Any, *, __depth__: int = 0, __start__: Optional[float] = None) -> Any:
@@ -408,18 +411,10 @@ def construct(
                 return access(raw, sim.value, **kwargs)
             return sim.value
         if isinstance(sim, (dict, Mapping)):
-            res_d = {}
-            for key, value in sim.items():
-                tmp = _construct(raw, value)
-                if tmp != SPEC_SKIP:
-                    res_d[key] = tmp
+            res_d = {k: r for k, v in sim.items() if (r := _construct(raw, v)) != SPEC_SKIP}
             return res_d if type(sim) is dict else type(sim)(**res_d)
         if isinstance(sim, (list, tuple)):
-            res_l = []
-            for value in sim:
-                tmp = _construct(raw, value)
-                if tmp != SPEC_SKIP:
-                    res_l.append(tmp)
+            res_l = [r for v in sim if (r := _construct(raw, v)) != SPEC_SKIP]
             return res_l if type(sim) is list else type(sim)(res_l)
         logger.warning(f"Got unsupported type ({type(sim)}) in specification construction: {sim}")
         return sim
@@ -465,7 +460,7 @@ class WithPipe(BaseModel):
 
     @cached_property
     def casting(self) -> Callable[[Any], Any]:
-        """Get the casting function."""
+        """Get the cached casting function that applies the pipe of casting patterns."""
         pipe: list[Callable[[Any], Any]] = []
         for ind, ptn in enumerate(self.pipe):
             inst = ptn.build().runs[0]
@@ -475,31 +470,34 @@ class WithPipe(BaseModel):
         return partial(_casting, pipe=pipe)
 
 
-class _Constructor(WithPipe, ABC):
+class _Spec(WithPipe, ABC):
     @model_validator(mode="after")
     def _validate_constructor(self) -> Self:
         """Validate the constructor."""
         _ = self.spec  # Ensure spec are initialized and cached
         return self
 
+    @cached_property
+    def spec(self) -> Any:
+        """Get the cached specification for construction."""
+        return self._get_spec()
+
     @abstractmethod
     def _get_spec(self) -> Any:
         """Get the specification for construction."""
 
     @cached_property
-    def spec(self) -> Any:
-        return self._get_spec()
+    def placeholder_depth(self) -> int:
+        """Get the cached maximum depth of placeholders in the specification."""
+        return self._get_placeholder_depth()
+
+    def _get_placeholder_depth(self) -> int:
+        """Get the maximum depth of placeholders in the specification."""
+        return 0
 
     @abstractmethod
-    def _construct(self, data: Any) -> Any:
-        """Construct the value from data based on the specification.
-
-        Args:
-            data (Any): The data to construct from.
-
-        Returns:
-            Any: The constructed value before casting.
-        """
+    def _constructor(self, total_depth: int) -> Callable[[Any], Any]:
+        """Get the constructor function based on the specification and total depth of placeholders."""
 
     def __call__(self, data: Any) -> Any:
         """Construct the value from data based on the specification.
@@ -510,10 +508,28 @@ class _Constructor(WithPipe, ABC):
         Returns:
             Any: The constructed and casted value.
         """
-        return self.casting(self._construct(data))
+        return self._constructor(self.placeholder_depth)(data)
 
 
-class RawSpec(_Constructor):
+@dataclass
+class _Constructor:
+    spec: Any
+    convert_spec: Callable[[Any, Any], Any]
+    self_depth: int
+    total_depth: int
+    casting: Callable[[Any], Any]
+
+    def __call__(self, data: Any) -> Any:
+        if self.self_depth >= 0:
+            self.spec = self.convert_spec(data, self.spec)
+            self.self_depth -= 1
+        if self.total_depth == 0:
+            return self.casting(self.spec)
+        self.total_depth -= 1
+        return self
+
+
+class RawSpec(_Spec):
     """Raw specification for constructing values from data based on a raw specification input."""
 
     raw: Optional[Union[str, int, float, bool, bytes]] = Field("", alias=_ALIAS_SPEC)
@@ -548,9 +564,17 @@ class RawSpec(_Constructor):
     def _get_spec(self) -> Any:
         return SpecIntermediate.convert_spec(self.raw)
 
+    def _get_placeholder_depth(self) -> int:
+        """Implementation to get the maximum depth of placeholders in the specification."""
+        count, spec = 0, self.spec
+        while isinstance(spec, SpecIntermediate) and spec.identifier == SPEC_PLACEHOLDER:
+            count += 1
+            spec = spec.value
+        return count
+
     @cached_property
     def has_construct_kwargs(self) -> bool:
-        """Check if any construction keyword arguments are set."""
+        """Check if any construction keyword arguments are set, which affects serialization behavior."""
         return (
             self.return_type is not None
             or self.support_basemodel is not None
@@ -561,7 +585,7 @@ class RawSpec(_Constructor):
 
     @cached_property
     def construct_kwargs(self) -> dict[str, Any]:
-        """Get the construction keyword arguments."""
+        """Get the cached construction keyword arguments."""
         return {
             "return_type": self.return_type,
             "support_basemodel": self.support_basemodel,
@@ -569,12 +593,19 @@ class RawSpec(_Constructor):
             "raise_error": self.raise_error,
         }
 
-    def _construct(self, data: Any) -> Any:
-        """Construct the value from data based on the specification."""
-        return construct(data, self.spec, **self.construct_kwargs)
+    def _constructor(self, total_depth: int) -> Callable[[Any], Any]:
+        if total_depth == 0:
+            return lambda x: self.casting(construct(x, self.spec, **self.construct_kwargs))
+        return _Constructor(
+            spec=self.spec,
+            convert_spec=partial(construct, **self.construct_kwargs),
+            self_depth=self.placeholder_depth,
+            total_depth=total_depth,
+            casting=self.casting,
+        )
 
 
-class ObjectSpec(_Constructor):
+class ObjectSpec(_Spec):
     """Object specification for constructing values from data based on an object pattern."""
 
     pattern: ObjectPattern = Field(default_factory=ObjectPattern, alias=_ALIAS_SPEC)
@@ -601,12 +632,21 @@ class ObjectSpec(_Constructor):
     def _get_spec(self) -> Any:
         return self.pattern.build().runs[0]
 
-    def _construct(self, data: Any) -> Any:
-        """Construct the value from data based on the specification."""
-        return self.spec
+    def _constructor(self, total_depth: int) -> Callable[[Any], Any]:
+        if total_depth == 0:
+            return lambda _: self.casting(self.spec)
+        return _Constructor(
+            spec=self.spec,
+            total_depth=total_depth,
+            casting=self.casting,
+            # ObjectSpec itself does not have placeholders, but its spec may contain placeholders,
+            # so self_depth is set to -1 to indicate that it should not be decremented for the ObjectSpec level.
+            convert_spec=lambda _, s: s,
+            self_depth=-1,
+        )
 
 
-class FlexSpec(_Constructor):
+class FlexSpec(_Spec):
     """Flexible specification that can handle various specification structures for constructing values from data."""
 
     structure: Union[
@@ -647,26 +687,58 @@ class FlexSpec(_Constructor):
                 return {k: _get(v) for k, v in structure.items()}
             if isinstance(structure, list):
                 return [_get(v) for v in structure]
-            if isinstance(structure, (RawSpec, ObjectSpec)):
+            if isinstance(structure, (RawSpec, ObjectSpec, FlexSpec)):
                 return structure.spec
             logger.debug(f"Got unsupported type ({type(structure)}) in specification structure: {structure}")
             return structure
 
         return _get(self.structure)
 
-    def _construct(self, data: Any) -> Any:
+    def _get_placeholder_depth(self) -> int:
+        """Implementation to get the maximum depth of placeholders in the specification."""
+
+        def _depth(structure: Any) -> int:
+            if isinstance(structure, dict):
+                return max((_depth(v) for v in structure.values()), default=0)
+            if isinstance(structure, list):
+                return max((_depth(v) for v in structure), default=0)
+            if isinstance(structure, (RawSpec, ObjectSpec, FlexSpec)):
+                return structure.placeholder_depth
+            return 0
+
+        return _depth(self.structure)
+
+    def _constructor(self, total_depth: int) -> Callable[[Any], Any]:
+        if total_depth == 0:
+
+            def _construct(data: Any) -> Any:
+                if isinstance(self.structure, dict):
+                    return {k: r for k, v in self.structure.items() if (r := v(data)) != SPEC_SKIP}
+                if isinstance(self.structure, list):
+                    return [r for v in self.structure if (r := v(data)) != SPEC_SKIP]
+                return self.structure(data)
+
+            return _construct
         if isinstance(self.structure, dict):
-            res_d = {}
-            for key, value in self.structure.items():
-                tmp = value(data)
-                if tmp != SPEC_SKIP:
-                    res_d[key] = tmp
-            return res_d
+            return _Constructor(
+                spec={k: v._constructor(total_depth) for k, v in self.structure.items()},
+                convert_spec=lambda d, s: {k: r for k, v in s.items() if (r := v(d)) != SPEC_SKIP},
+                self_depth=self.placeholder_depth,
+                total_depth=total_depth,
+                casting=self.casting,
+            )
         if isinstance(self.structure, list):
-            res_l = []
-            for value in self.structure:
-                tmp = value(data)
-                if tmp != SPEC_SKIP:
-                    res_l.append(tmp)
-            return res_l
-        return self.structure(data)
+            return _Constructor(
+                spec=[v._constructor(total_depth) for v in self.structure],
+                convert_spec=lambda d, s: [r for v in s if (r := v(d)) != SPEC_SKIP],
+                self_depth=self.placeholder_depth,
+                total_depth=total_depth,
+                casting=self.casting,
+            )
+        return _Constructor(
+            spec=self.structure._constructor(total_depth),
+            convert_spec=lambda d, s: s(d),
+            self_depth=self.placeholder_depth,
+            total_depth=total_depth,
+            casting=self.casting,
+        )
