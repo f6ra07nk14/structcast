@@ -50,6 +50,7 @@ All of this runs through a **sandboxed security layer** that validates imports, 
     - [Summary Table](#summary-table)
   - [Examples](#examples)
     - [Advanced Examples](#advanced-examples)
+  - [AI Agent Resources](#ai-agent-resources)
   - [Requirements](#requirements)
   - [License](#license)
 
@@ -710,6 +711,17 @@ These examples demonstrate **cross-module integration** — combining `load_yaml
 | [06_sensor_dashboard.py](examples/06_sensor_dashboard.py)             | **Mapping pattern**: `_jinja_yaml_` merges dynamic sensor paths, thresholds, and Instantiator patterns into static config     |
 | [07_validation_pipeline.py](examples/07_validation_pipeline.py)       | **List pattern**: `_jinja_yaml_` splices dynamic validation steps into a static pipeline; mapping pattern for output settings |
 | [08_multi_tenant_analytics.py](examples/08_multi_tenant_analytics.py) | **Both patterns**: mapping generates per-tenant FlexSpec specs; list splices aggregation tools; per-tenant data processing    |
+
+---
+
+## AI Agent Resources
+
+The following documents are designed for AI coding agents (Copilot, Cursor, Claude, etc.) to quickly understand and work with this codebase:
+
+| Document                           | Purpose                                                                                                                                        |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| [README_AGENT.md](README_AGENT.md) | Architecture overview, data flow, pattern alias quick reference, security rules, and code conventions — optimized for AI agent context windows |
+| [SKILL.md](SKILL.md)               | Skill tree mapping every capability to its module, entry point, and usage — structured as a lookup table for task planning                     |
 
 ---
 
