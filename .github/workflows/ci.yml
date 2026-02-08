@@ -139,7 +139,7 @@ jobs:
           build-args: |
             PY_VERSION=3.13
           cache-from: type=gha,scope=dev-image
-          cache-to: type=inline
+          cache-to: type=gha,mode=max,scope=dev-image
 
       - name: Log build summary
         run: |
