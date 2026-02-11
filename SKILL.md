@@ -7,17 +7,6 @@ description: StructCast converts YAML/JSON configuration into live Python object
 
 Capability reference for each module, with entry points and key APIs.
 
-## When to Use This Skill
-
-Use StructCast when you need to:
-- **Build objects from config**: Instantiate Python classes/functions from YAML/JSON without writing factory code
-- **Navigate nested data**: Extract and reshape deeply nested dicts/lists using dot-notation paths
-- **Generate dynamic config**: Embed Jinja2 templates in data structures with conditional logic and loops
-- **Secure dynamic imports**: Control which modules/attributes can be imported from configuration
-- **Config-driven pipelines**: Chain template expansion → data extraction → object instantiation → processing
-
-**Trigger phrases**: "config-driven", "instantiate from YAML", "dynamic configuration", "nested data extraction", "template config", "secure imports"
-
 ## Quick Reference
 
 **Instantiation**: `instantiate({"_obj_": [{"_addr_": "module.Class"}]})` 
@@ -104,7 +93,7 @@ result = [processor(v) for v in values]
 
 **Module**: `structcast.core.exceptions`
 
-All modules use typed exceptions for error conditions:
+Handle typed exceptions from each module:
 
 | Exception | Raised By | Common Causes |
 | -- | -- | -- |
@@ -152,7 +141,7 @@ Navigate nested data with dot-notation paths and construct new structures from s
 | FlexSpec with objects | `FlexSpec.model_validate({"_obj_": [...]})` | Inline instantiation |
 | Copy semantics | `configure_spec(return_type=ReturnType.DEEP_COPY)` | Control reference/copy behavior |
 | Custom resolver | `register_resolver("env", lambda k: os.environ.get(k))` | Extend spec language |
-| Custom accesser | `register_accesser(MyType, my_accessor_fn)` | Access custom data types |
+| Custom accessor | `register_accesser(MyType, my_accessor_fn)` | Access custom data types |
 | BaseModel access | Enabled by default (`support_basemodel=True`) | Navigate Pydantic models |
 | Attribute access | Enabled by default (`support_attribute=True`) | `getattr()` on objects |
 | Post-processing pipe | `WithPipe` base, `_pipe_` alias | Chain transformations after spec |
@@ -311,101 +300,3 @@ See `examples/06_sensor_dashboard.py`, `examples/07_validation_pipeline.py`, `ex
 **Template variables undefined**
 - **Cause**: Missing variables in `template_kwargs` with `StrictUndefined`
 - **Solution**: Provide all variables or configure with `configure_jinja(undefined_type=Undefined)`
-
-### Debugging Tips
-
-1. **Enable logging**: StructCast uses Python's `logging` module
-   ```python
-   import logging
-   logging.basicConfig(level=logging.DEBUG)
-   ```
-
-2. **Inspect intermediate results**: Break pipeline into steps
-   ```python
-   expanded = extend_structure(config, template_kwargs=kwargs)
-   print(expanded)  # Check template expansion
-   spec_obj = FlexSpec.model_validate(spec)
-   print(spec_obj.spec)  # Check converted spec
-   ```
-
-3. **Test patterns in isolation**: Use `PatternResult` to see build steps
-   ```python
-   pattern = ObjectPattern.model_validate({"_obj_": [...]})
-   result = pattern.build()
-   print(result.runs)  # See intermediate objects
-   ```
-
-4. **Check security settings**: Verify current configuration
-   ```python
-   from structcast.utils.security import _security_settings
-   print(_security_settings.allowed_modules)
-   ```
-
-## Testing
-
-**Module**: `tests/`
-
-| Capability | Entry Point |
-| -- | -- |
-| Run all tests + doctests | `pytest` (configured in `pyproject.toml`) |
-| Temporary security config | `configure_security_context(allowed_modules=..., blocked_modules=...)` |
-| Temporary import dir | `temporary_registered_dir(path)` |
-| Construct patterns in tests | Always use `Model.model_validate({...})`, never direct constructors |
-| Full compatibility matrix | `tox` — Python 3.9–3.13 × Pydantic 2.11.x–2.12.x |
-
-**Testing Context Manager Examples**:
-
-```python
-from tests.utils import configure_security_context, temporary_registered_dir
-
-# Example 1: Temporarily allow custom module
-def test_custom_security():
-    with configure_security_context(allowed_modules={"mymodule": None}):
-        # Custom security rules active here
-        obj = instantiate({"_obj_": [{"_addr_": "mymodule.MyClass"}]})
-    # Automatically restored to defaults after block
-
-# Example 2: Temporarily register local import directory
-def test_local_import():
-    with temporary_registered_dir("/path/to/modules"):
-        # Can import from registered directory
-        obj = instantiate({"_obj_": [{"_addr_": "local_module.func"}]})
-    # Directory unregistered after block
-
-# Example 3: Combined usage
-def test_combined():
-    with configure_security_context(blocked_modules=set()):
-        with temporary_registered_dir("./custom_modules"):
-            # Both modifications active
-            result = instantiate(config)
-```
-
-## Related Resources
-
-### Documentation
-- **README.md**: User-facing guide with installation, quick start, and comparisons to Hydra/glom
-- **README_AGENT.md**: AI agent reference with repository map, data flow diagrams, and development commands
-- **.github/copilot-instructions.md**: Development guidelines, architecture overview, and code conventions
-
-### Example Files
-- `examples/01_basic_instantiation.py` — Object instantiation fundamentals
-- `examples/02_specifier_access.py` — Data access and reshaping patterns
-- `examples/03_template_rendering.py` — Template usage and expansion
-- `examples/04_security_configuration.py` — Security settings and validation
-- `examples/05_yaml_workflow.py` — YAML loading and workflow integration
-- `examples/06_sensor_dashboard.py` — IoT monitoring with mapping pattern templates
-- `examples/07_validation_pipeline.py` — Data validation with config-driven processors
-- `examples/08_multi_tenant_analytics.py` — Multi-tenant data extraction and reporting
-
-### Key Source Files
-- `src/structcast/core/instantiator.py` — Pattern implementation and object building
-- `src/structcast/core/specifier.py` — Spec conversion and data access logic
-- `src/structcast/core/template.py` — Jinja2 integration and structure expansion
-- `src/structcast/utils/security.py` — Security enforcement and validation
-- `src/structcast/utils/constants.py` — Default blocklists and allowlists
-
-### Testing
-- `tests/core/` — Module-specific test suites
-- `tests/utils/__init__.py` — Test utilities and context managers
-- `tox.ini` — Multi-version compatibility testing configuration
-
