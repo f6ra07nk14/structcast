@@ -1,10 +1,13 @@
 ARG PY_VERSION=3.13
 FROM ghcr.io/astral-sh/uv:python${PY_VERSION}-bookworm-slim
 
-# Install build dependencies for compiling Python packages
+# Install build dependencies for compiling Python packages and Node.js
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     build-essential \
+    curl \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # Define Python versions variable
@@ -29,8 +32,12 @@ RUN --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --frozen --no-install-project --dev --group tox
 
+# Install Node.js dependencies for semantic-release
+RUN --mount=type=bind,source=package.json,target=package.json \
+    npm install --prefix /app
+
 # Activate virtual environment and set up PATH to use installed tools
-ENV PATH="/app/.venv/bin:${PATH}"
+ENV PATH="/app/.venv/bin:/app/node_modules/.bin:${PATH}"
 
 # Set Python path
 ENV PYTHONPATH=/app/src
