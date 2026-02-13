@@ -1,3 +1,72 @@
+## [1.1.0](https://github.com/f6ra07nk14/structcast/compare/v1.0.0...v1.1.0) (2026-02-13)
+
+
+### 👷 Build
+
+* add git installation to Dockerfile for development environment ([9587b87](https://github.com/f6ra07nk14/structcast/commit/9587b87eb3644d04b3a355069073c3fa62118291))
+* remove Node.js installation and dependencies from Dockerfile ([1969b6d](https://github.com/f6ra07nk14/structcast/commit/1969b6d72c255f41959d91294f3edc865297b8ad))
+* remove unsupported Python version 3.8 from the versions list ([71f177c](https://github.com/f6ra07nk14/structcast/commit/71f177c692b255cea297c0034c1193273e302865))
+* upgrade dependency packages ([8060c26](https://github.com/f6ra07nk14/structcast/commit/8060c263cae0f878d7f4bb2fbb1d43e19d0d72c2))
+
+
+### 📦 Other
+
+* **release:** 1.1.0 [skip ci] ([c6fcdcb](https://github.com/f6ra07nk14/structcast/commit/c6fcdcb6d479f2c05ec284ae951d94299f7db87f)), closes [#10](https://github.com/f6ra07nk14/structcast/issues/10) [#12](https://github.com/f6ra07nk14/structcast/issues/12) [#12](https://github.com/f6ra07nk14/structcast/issues/12) [#11](https://github.com/f6ra07nk14/structcast/issues/11) [#13](https://github.com/f6ra07nk14/structcast/issues/13) [#6](https://github.com/f6ra07nk14/structcast/issues/6) [#7](https://github.com/f6ra07nk14/structcast/issues/7) [#9](https://github.com/f6ra07nk14/structcast/issues/9) [#8](https://github.com/f6ra07nk14/structcast/issues/8) [#10](https://github.com/f6ra07nk14/structcast/issues/10) [#12](https://github.com/f6ra07nk14/structcast/issues/12) [#12](https://github.com/f6ra07nk14/structcast/issues/12) [#11](https://github.com/f6ra07nk14/structcast/issues/11) [#13](https://github.com/f6ra07nk14/structcast/issues/13) [#6](https://github.com/f6ra07nk14/structcast/issues/6) [#7](https://github.com/f6ra07nk14/structcast/issues/7) [#9](https://github.com/f6ra07nk14/structcast/issues/9) [#8](https://github.com/f6ra07nk14/structcast/issues/8) [#10](https://github.com/f6ra07nk14/structcast/issues/10)
+* **release:** 1.1.0 [skip ci] ([4dc5a20](https://github.com/f6ra07nk14/structcast/commit/4dc5a2072b145c44a17b12dd3193c61245f27c19)), closes [#10](https://github.com/f6ra07nk14/structcast/issues/10) [#12](https://github.com/f6ra07nk14/structcast/issues/12) [#12](https://github.com/f6ra07nk14/structcast/issues/12) [#11](https://github.com/f6ra07nk14/structcast/issues/11) [#13](https://github.com/f6ra07nk14/structcast/issues/13) [#6](https://github.com/f6ra07nk14/structcast/issues/6) [#7](https://github.com/f6ra07nk14/structcast/issues/7) [#9](https://github.com/f6ra07nk14/structcast/issues/9) [#8](https://github.com/f6ra07nk14/structcast/issues/8)
+* **release:** 1.1.0 [skip ci] ([bc51251](https://github.com/f6ra07nk14/structcast/commit/bc512512b11ca5a9f4941720d8ca03b684380437)), closes [#10](https://github.com/f6ra07nk14/structcast/issues/10) [#12](https://github.com/f6ra07nk14/structcast/issues/12) [#12](https://github.com/f6ra07nk14/structcast/issues/12) [#11](https://github.com/f6ra07nk14/structcast/issues/11) [#13](https://github.com/f6ra07nk14/structcast/issues/13) [#6](https://github.com/f6ra07nk14/structcast/issues/6) [#7](https://github.com/f6ra07nk14/structcast/issues/7) [#9](https://github.com/f6ra07nk14/structcast/issues/9) [#8](https://github.com/f6ra07nk14/structcast/issues/8)
+* update uv.lock to sync with pyproject.toml version ([cd00b27](https://github.com/f6ra07nk14/structcast/commit/cd00b27afcb4c9c379e07bdaa3fc7102727b05b4))
+
+
+### 🦊 CI/CD
+
+* add job to publish wheel file to TestPyPI after successful release ([20ec1b9](https://github.com/f6ra07nk14/structcast/commit/20ec1b93c79c076633eea9cc2ed530951cd29687))
+* add safe.directory configuration for GitHub Actions ([a13c5df](https://github.com/f6ra07nk14/structcast/commit/a13c5df35fe878a37f546e35420f4962cd09de61))
+* change release type for CI changes to patch ([c401add](https://github.com/f6ra07nk14/structcast/commit/c401addc73e759bef03aa1d8d0af12e308855e46))
+* enhance Docker image existence check with manifest details ([50bde38](https://github.com/f6ra07nk14/structcast/commit/50bde38796d729de82924af4d8245e03187a9e26))
+* prevent CI changes from triggering a release ([0368fe5](https://github.com/f6ra07nk14/structcast/commit/0368fe5cfbb97d1e6ba8b2c93519bb3210df833d))
+* publish job to deploy to PyPI instead of TestPyPI ([5980a96](https://github.com/f6ra07nk14/structcast/commit/5980a968f5f12d880ecc727ac4994542c31baf98))
+* refactor Docker image handling and remove unused cleanup job ([c981272](https://github.com/f6ra07nk14/structcast/commit/c981272a9000cb904a43194b1c557303d8074eb9))
+* remove redundant environment declaration from release job ([cdb5686](https://github.com/f6ra07nk14/structcast/commit/cdb56868053e1ef4019b09d5452e19124bc3a7cf))
+* restore conditions for publish-to-pypi job to ensure proper execution ([46661ce](https://github.com/f6ra07nk14/structcast/commit/46661cedbca84b567514be96918d55d9d0573583))
+* simplify condition for publishing to TestPyPI ([b13b76c](https://github.com/f6ra07nk14/structcast/commit/b13b76c8752356600e1c9a76474ee5850e2d0aa3))
+* standardize environment name for TestPyPI job ([a2d6f99](https://github.com/f6ra07nk14/structcast/commit/a2d6f991b3b2d41f036aa11f96bb2ae6b193b8d1))
+* update actions/checkout to v6 and remove package.json ([24d8d4b](https://github.com/f6ra07nk14/structcast/commit/24d8d4b97b6ce8e6eafcded3a5b61affdbf5a960))
+* update Docker image caching strategy and refine cleanup logic for merged PRs ([dcb7189](https://github.com/f6ra07nk14/structcast/commit/dcb71897f9203ed519bc7b14435c4df261efa6c0))
+* update publish-to-pypi job conditions for better flexibility ([9e353ff](https://github.com/f6ra07nk14/structcast/commit/9e353ff78f1129b25cac13a66c6f61a1789e929b))
+* update release job dependencies and permissions; add Node.js installation to Dockerfile ([7067276](https://github.com/f6ra07nk14/structcast/commit/70672760cb100fc1b084028a53cd6d27871b7e77))
+* update release preparation command and include uv.lock in assets ([097d7f4](https://github.com/f6ra07nk14/structcast/commit/097d7f47ad6bcd9c192ce3f436b8094297230bd7))
+* update semantic-release setup to install dependencies and streamline execution ([7f3e8a9](https://github.com/f6ra07nk14/structcast/commit/7f3e8a9af85106d1ca1580006960a6f89060feac))
+* update semantic-release setup to use actions/setup-node and install dependencies ([d3a8b48](https://github.com/f6ra07nk14/structcast/commit/d3a8b48f2095a6b875ba7f15685662b751176bb2))
+* update semantic-release setup to use cycjimmy/semantic-release-action and streamline configuration ([ea84682](https://github.com/f6ra07nk14/structcast/commit/ea84682ba76a52aa5ce3e50742d286611ff35424))
+* use pre-installed semantic-release instead of npx ([#10](https://github.com/f6ra07nk14/structcast/issues/10)) ([ab86cc3](https://github.com/f6ra07nk14/structcast/commit/ab86cc3638fc229cb3438f1969d6402f41f77121))
+
+
+### 📔 Docs
+
+* remove outdated usage guidelines and debugging tips from SKILL.md ([6cfab00](https://github.com/f6ra07nk14/structcast/commit/6cfab00bf3e426f68aa9ad31c68f7821e672b495))
+* update SKILL.md to enhance description and add usage examples ([48eff50](https://github.com/f6ra07nk14/structcast/commit/48eff505552fb6c14046bdc34dd27f9f00ff8ab3))
+
+
+### 💎 Features
+
+* add custom pattern registration and validation tests ([dd24383](https://github.com/f6ra07nk14/structcast/commit/dd243831e4b1057d40a53df69a015644c5987df1))
+
+
+### 🔧 Fixes
+
+* change Docker cache strategy to prevent untagged images ([6951228](https://github.com/f6ra07nk14/structcast/commit/6951228f1dc22480eec1325933bb61467e422ca8))
+* update CHANGELOG for version 1.1.0 release, and retry ci ([17d0f77](https://github.com/f6ra07nk14/structcast/commit/17d0f770ce5672c349cf14b3aeb10cc3eb941e30))
+
+
+### 🔨 Refactor
+
+* remove redundant manifest information extraction from CI workflow ([0ecafcc](https://github.com/f6ra07nk14/structcast/commit/0ecafcc0d451a448b4215132f9bba3a4c9c236c0))
+
+
+### ✨ Style
+
+* add type ignore for validation in ObjectPattern ([64d5122](https://github.com/f6ra07nk14/structcast/commit/64d5122ae2296c3e3d4025e80a9ba64523cdea51))
+
 ## 1.0.0 (2026-02-08)
 
 
