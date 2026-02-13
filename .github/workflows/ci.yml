@@ -90,7 +90,7 @@ jobs:
           IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${BRANCH_NAME}-latest"
           echo "Checking for image: ${IMAGE_TAG}"
 
-          if docker pull "${IMAGE_TAG}" 2>/dev/null; then
+          if docker manifest inspect "${IMAGE_TAG}" >/dev/null 2>&1; then
             echo "exists=true" >> $GITHUB_OUTPUT
             echo "✓ Docker image ${IMAGE_TAG} exists"
           else
@@ -158,7 +158,7 @@ jobs:
           IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${BRANCH_NAME}-latest"
 
           echo "Verifying image: ${IMAGE_TAG}"
-          if docker pull "${IMAGE_TAG}" 2>/dev/null; then
+          if docker manifest inspect "${IMAGE_TAG}" >/dev/null 2>&1; then
             echo "✓ Docker image exists and is accessible: ${IMAGE_TAG}"
           else
             echo "✗ Docker image verification failed: ${IMAGE_TAG}"
