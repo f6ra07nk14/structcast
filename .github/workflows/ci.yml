@@ -243,6 +243,8 @@ jobs:
       packages: read
       pull-requests: write
       issues: write
+    environment:
+      name: release
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -258,26 +260,19 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Install semantic-release
-        run: |
-          npm install -g semantic-release@23 \
-            @semantic-release/changelog@6 \
-            @semantic-release/git@10 \
-            @semantic-release/github@10 \
-            @semantic-release/exec@6 \
-            conventional-changelog-conventionalcommits@7
-          
-      - name: Run Semantic Release
+      - name: Run semantic-release
+        uses: cycjimmy/semantic-release-action@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          npx semantic-release
+        with: 
+          extra_plugins: |
+            @semantic-release/changelog@6
+            @semantic-release/git@10
+            @semantic-release/github@10
+            @semantic-release/exec@6
+            conventional-changelog-conventionalcommits@7
           
+
       - name: Check if release was created
         id: check-release
         run: |
