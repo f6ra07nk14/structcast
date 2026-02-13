@@ -26,7 +26,7 @@
           },
           {
             "type": "ci",
-            "release": false
+            "release": "patch"
           },
           {
             "type": "docs",
