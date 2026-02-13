@@ -326,15 +326,14 @@ jobs:
             echo "Dev branch does not exist, skipping back-merge"
           fi
 
-  # Publish to TestPyPI Job: Publishes the wheel file to TestPyPI after successful release
-  publish-to-testpypi:
-    # if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[skip ci]')
-    # needs: release
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+  # Publish to PyPI Job: Publishes the wheel file to PyPI after successful release
+  publish-to-pypi:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[skip ci]')
+    needs: release
     runs-on: ubuntu-latest
     environment:
-      name: testpypi
-      url: https://test.pypi.org/p/structcast
+      name: pypi
+      url: https://pypi.org/p/structcast
     permissions:
       contents: read
       id-token: write  # IMPORTANT: mandatory for trusted publishing
@@ -394,11 +393,10 @@ jobs:
           echo "✓ Successfully downloaded: dist/$WHEEL_NAME"
           ls -lh dist/
 
-      - name: Publish to TestPyPI
+      - name: Publish to PyPI
         if: steps.get-release.outputs.has_release == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          repository-url: https://test.pypi.org/legacy/
           skip-existing: true
           verbose: true
           print-hash: true
