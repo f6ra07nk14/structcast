@@ -21,7 +21,7 @@ from pydantic import (
     model_serializer,
     model_validator,
 )
-from typing_extensions import Self, TypeAlias
+from typing_extensions import Self
 
 from structcast.core.constants import MAX_RECURSION_DEPTH, MAX_RECURSION_TIME
 from structcast.core.exceptions import InstantiationError, SpecError
@@ -66,7 +66,15 @@ class BasePattern(BaseModel, ABC):
         """
 
 
-def _validate_pattern_result(
+_patterns: list[BasePattern] = []
+
+
+def register_pattern(ptn: BasePattern) -> None:
+    """Register a pattern for instantiation."""
+    _patterns.append(ptn)
+
+
+def validate_pattern_result(
     res: Optional[PatternResult],
 ) -> tuple[type[PatternResult], list[BasePattern], list[Any], int, float]:
     """Validate pattern result and extract components.
@@ -117,7 +125,7 @@ class AddressPattern(BasePattern):
 
     def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the objects from the pattern."""
-        res_t, ptns, runs, depth, start = _validate_pattern_result(result)
+        res_t, ptns, runs, depth, start = validate_pattern_result(result)
         run = import_from_address(self.address, module_file=self.file)
         return res_t(patterns=ptns + [self], runs=runs + [run], depth=depth, start=start)
 
@@ -137,7 +145,7 @@ class AttributePattern(BasePattern):
 
     def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the objects from the pattern."""
-        res_t, ptns, runs, depth, start = _validate_pattern_result(result)
+        res_t, ptns, runs, depth, start = validate_pattern_result(result)
         if not runs:
             raise InstantiationError("No object to access attribute from.")
         runs, last = runs[:-1], runs[-1]
@@ -187,7 +195,7 @@ class CallPattern(BasePattern):
 
     def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the objects from the pattern."""
-        res_t, ptns, runs, depth, start = _validate_pattern_result(result)
+        res_t, ptns, runs, depth, start = validate_pattern_result(result)
         if not runs:
             raise InstantiationError("No object to call.")
         runs, last = runs[:-1], runs[-1]
@@ -222,7 +230,7 @@ class BindPattern(BasePattern):
 
     def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the objects from the pattern."""
-        res_t, ptns, runs, depth, start = _validate_pattern_result(result)
+        res_t, ptns, runs, depth, start = validate_pattern_result(result)
         if not runs:
             raise InstantiationError("No object to bind.")
         runs, last = runs[:-1], runs[-1]
@@ -270,22 +278,20 @@ class ObjectPattern(BasePattern):
     def patterns(self) -> list[BasePattern]:
         """Get the list of patterns."""
         try:
-            return TypeAdapter(list[PatternLike]).validate_python(self.object)
+            default_ptns = [AddressPattern, AttributePattern, CallPattern, BindPattern, ObjectPattern]
+            return TypeAdapter(list[Union[tuple(_patterns + default_ptns)]]).validate_python(self.object)
         except ValidationError as err:
             raise SpecError(f"Failed to validate ObjectPattern contents: {err.errors()}") from err
 
     def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the runnable from the pattern."""
-        res_t, ptns, runs, depth, start = _validate_pattern_result(result)
+        res_t, ptns, runs, depth, start = validate_pattern_result(result)
         new = res_t(depth=depth + 1, start=start)
         for ptn in self.patterns:
             new = ptn.build(new)
         if len(new.runs) == 1:
             return res_t(patterns=ptns + [self], runs=runs + new.runs, depth=depth, start=start)
         raise InstantiationError(f"ObjectPattern did not result in a single object (got {new.runs}): {new.patterns}")
-
-
-PatternLike: TypeAlias = Union[AddressPattern, AttributePattern, CallPattern, BindPattern, ObjectPattern]
 
 
 def instantiate(cfg: Any, *, __depth__: int = 0, __start__: Optional[float] = None) -> Any:
