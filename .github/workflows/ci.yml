@@ -234,6 +234,9 @@ jobs:
           fi
 
   # Release Job: Runs after merge to main (Post-Merge)
+  # Note: semantic-release creates GitHub releases with build artifacts but does NOT
+  # commit version updates back to the repository due to branch protection rules.
+  # Version numbers are updated in build artifacts only (wheel, tarball).
   release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[skip ci]')
     runs-on: ubuntu-latest
