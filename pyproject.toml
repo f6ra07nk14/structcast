@@ -1,6 +1,6 @@
 [project]
 name = "structcast"
-version = "1.0.0"
+version = "1.1.0"
 description = "Elegantly orchestrating structured data via a flexible and serializable workflow."
 readme = "README.md"
 requires-python = ">=3.9"
