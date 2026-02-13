@@ -251,6 +251,63 @@ assert hex_to_int("FF") == 255
 
 The `instantiate()` function recursively walks any nested dict/list, detecting and executing patterns wherever they appear. Non-pattern values pass through unchanged, making it safe to call on mixed data structures.
 
+**Custom Patterns:**
+
+You can extend StructCast's instantiation capabilities by creating custom pattern types. This is useful for domain-specific operations or frequently used construction patterns:
+
+```python
+from structcast.core.instantiator import (
+    BasePattern, PatternResult, register_pattern, instantiate, validate_pattern_result
+)
+from structcast.core.exceptions import InstantiationError
+from pydantic import Field
+from typing import Optional
+
+# 1. Define a custom pattern by inheriting from BasePattern
+class MultiplyPattern(BasePattern):
+    """Pattern that multiplies a numeric value by a factor."""
+    
+    factor: int = Field(alias="_multiply_")
+    """The multiplication factor."""
+    
+    def build(self, result: Optional[PatternResult] = None) -> PatternResult:
+        """Build the pattern by multiplying the last result."""
+        res_t, ptns, runs, depth, start = validate_pattern_result(result)
+        if not runs:
+            raise InstantiationError("No value to multiply.")
+        runs, last = runs[:-1], runs[-1]
+        if not isinstance(last, (int, float)):
+            raise InstantiationError(f"Cannot multiply non-numeric type: {type(last).__name__}")
+        new_value = last * self.factor
+        return res_t(patterns=ptns + [self], runs=runs + [new_value], depth=depth, start=start)
+
+# 2. Register the custom pattern
+register_pattern(MultiplyPattern)
+
+# 3. Use it in ObjectPattern configurations
+config = {
+    "_obj_": [
+        {"_addr_": "int"},      # Import int class
+        {"_call_": ["10"]},     # Call int("10") → 10
+        {"_multiply_": 3},      # Multiply by 3 → 30
+    ]
+}
+
+result = instantiate(config)
+assert result == 30
+```
+
+**Custom Pattern Requirements:**
+
+- Inherit from `BasePattern` (Pydantic model with `frozen=True, extra="forbid"`)
+- Define pattern data as Pydantic fields with `Field(alias="_your_key_")`
+- Implement `build(result: Optional[PatternResult] = None) -> PatternResult`
+- Call `validate_pattern_result(result)` to extract context and enforce security checks
+- Return a new `PatternResult` with updated `patterns` and `runs` lists
+- Register with `register_pattern(YourPattern)` before use
+
+Custom patterns integrate seamlessly with built-in patterns and can be composed in any `_obj_` chain. They're validated at instantiation time and benefit from all security constraints (recursion limits, timeouts, import validation).
+
 ### Specifier
 
 The Specifier module provides a three-phase process for extracting and reshaping data:

@@ -55,6 +55,54 @@ JinjaTemplate(...)(**kwargs)          ← template.py: render final output
 
 Every import/attribute access in this pipeline passes through `utils/security.py`.
 
+## Custom Pattern Extension
+
+StructCast's instantiation system is extensible via custom patterns. Create domain-specific patterns for operations not covered by the built-in set:
+
+```python
+from structcast.core.instantiator import BasePattern, PatternResult, register_pattern, validate_pattern_result
+from pydantic import Field
+from typing import Optional
+
+class CustomPattern(BasePattern):
+    """Your custom pattern."""
+    param: str = Field(alias="_custom_")  # Must use alias
+    
+    def build(self, result: Optional[PatternResult] = None) -> PatternResult:
+        # 1. Validate and extract context (enforces security)
+        res_t, ptns, runs, depth, start = validate_pattern_result(result)
+        
+        # 2. Validate runs list
+        if not runs:
+            raise InstantiationError("No object to operate on.")
+        
+        # 3. Extract last run + remaining stack
+        runs, last = runs[:-1], runs[-1]
+        
+        # 4. Process last run
+        new_value = process(last, self.param)
+        
+        # 5. Return new PatternResult
+        return res_t(patterns=ptns + [self], runs=runs + [new_value], depth=depth, start=start)
+
+# Register before use
+register_pattern(CustomPattern)
+
+# Use in _obj_ chains
+instantiate({"_obj_": [{"_addr_": "..."}, {"_custom_": "param"}]})
+```
+
+**Custom Pattern Contract:**
+
+1. **Inherit from `BasePattern`** — frozen, extra='forbid', serialize_by_alias config inherited
+2. **Use `Field(alias="_key_")`** — pattern keys must be aliases for Pydantic serialization
+3. **Call `validate_pattern_result(result)`** — extracts (result_type, patterns, runs, depth, start) and enforces recursion/timeout limits
+4. **Manipulate `runs` list** — last element is current object, earlier elements are history
+5. **Return new `PatternResult`** — append self to `patterns`, append result to `runs`
+6. **Register with `register_pattern()`** — adds pattern class to `_patterns` list in `core/instantiator.py`
+
+Custom patterns are auto-discovered by `ObjectPattern.patterns` via `Union[tuple(_patterns + default_ptns)]` — no code changes needed after registration.
+
 ## Pattern Alias Quick Reference
 
 ### Instantiator Patterns (inside `_obj_` lists)

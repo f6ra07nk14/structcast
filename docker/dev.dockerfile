@@ -13,7 +13,7 @@ RUN apt-get update && \
 
 # Define Python versions variable
 # Note: Python 3.14 is excluded as it's not yet supported by pydantic-core/PyO3
-ARG PYTHON_VERSIONS="3.8 3.9 3.10 3.11 3.12 3.13"
+ARG PYTHON_VERSIONS="3.9 3.10 3.11 3.12 3.13"
 
 # Set working directory
 ENV HOME=/app

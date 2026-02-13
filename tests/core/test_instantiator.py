@@ -4,22 +4,26 @@ from collections import Counter, OrderedDict
 import math
 from pathlib import Path
 import time
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 from unittest.mock import patch
 
-from pydantic import ValidationError
+from pydantic import Field, ValidationError
 import pytest
 
+from structcast.core import instantiator
 from structcast.core.constants import MAX_RECURSION_DEPTH, MAX_RECURSION_TIME
 from structcast.core.exceptions import InstantiationError, SpecError
 from structcast.core.instantiator import (
     AddressPattern,
     AttributePattern,
+    BasePattern,
     BindPattern,
     CallPattern,
     ObjectPattern,
     PatternResult,
     instantiate,
+    register_pattern,
+    validate_pattern_result,
 )
 from structcast.utils.security import SecurityError
 from tests.utils import configure_security_context, temporary_registered_dir
@@ -719,7 +723,133 @@ class TestAdditionalCoverage:
                 instantiate(cfg)
 
     def test_recursion_time_exceeded_in_validate_pattern_result(self) -> None:
-        """Test that _validate_pattern_result raises error when time exceeded."""
+        """Test that validate_pattern_result raises error when time exceeded."""
         pattern = AddressPattern.model_validate({"_addr_": "dict"})
         with pytest.raises(InstantiationError, match="Maximum recursion time exceeded"):
             pattern.build(PatternResult(runs=[list], depth=0, start=time.time() - MAX_RECURSION_TIME - 1))
+
+
+# ============================================================================
+# Test 7: Custom Pattern Registration
+# ============================================================================
+
+
+class TestCustomPatternRegistration:
+    """Test registration of custom patterns via register_pattern."""
+
+    def test_register_custom_pattern_and_instantiate(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test registering a custom pattern and using it in ObjectPattern."""
+
+        # Define a custom pattern that multiplies a value
+        class MultiplyPattern(BasePattern):
+            """Pattern that multiplies the last result by a factor."""
+
+            factor: int = Field(alias="_multiply_")
+            """The multiplication factor."""
+
+            def build(self, result: Optional[PatternResult] = None) -> PatternResult:
+                """Build the pattern by multiplying the last result."""
+                res_t, ptns, runs, depth, start = validate_pattern_result(result)
+                if not runs:
+                    raise InstantiationError("No value to multiply.")
+                runs, last = runs[:-1], runs[-1]
+                if not isinstance(last, (int, float)):
+                    raise InstantiationError(f"Cannot multiply non-numeric type: {type(last).__name__}")
+                new_value = last * self.factor
+                return res_t(patterns=ptns + [self], runs=runs + [new_value], depth=depth, start=start)
+
+        # Use monkeypatch to set a clean _patterns list for this test
+        test_patterns: list[BasePattern] = []
+        monkeypatch.setattr(instantiator, "_patterns", test_patterns)
+        # Register the custom pattern
+        register_pattern(MultiplyPattern)
+        # Verify it was registered
+        assert any(isinstance(p, type) and issubclass(p, MultiplyPattern) for p in test_patterns)
+        # Use the custom pattern in an ObjectPattern
+        # Create a value and multiply it
+        config = {
+            "_obj_": [
+                {"_addr_": "int"},  # Get the int class
+                {"_call_": ["10"]},  # Call int("10") to get 10
+                {"_multiply_": 3},  # Multiply by 3
+            ]
+        }
+        result = instantiate(config)
+        assert result == 30, f"Expected 30, got {result}"
+
+    def test_register_custom_pattern_with_nested_objects(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test custom pattern works with nested object instantiation."""
+
+        # Define a custom pattern that adds a prefix to strings
+        class PrefixPattern(BasePattern):
+            """Pattern that adds a prefix to the last string result."""
+
+            prefix: str = Field(alias="_prefix_")
+            """The prefix to add."""
+
+            def build(self, result: Optional[PatternResult] = None) -> PatternResult:
+                """Build the pattern by adding prefix to the last result."""
+                res_t, ptns, runs, depth, start = validate_pattern_result(result)
+                if not runs:
+                    raise InstantiationError("No value to prefix.")
+                runs, last = runs[:-1], runs[-1]
+                if not isinstance(last, str):
+                    raise InstantiationError(f"Cannot prefix non-string type: {type(last).__name__}")
+                new_value = self.prefix + last
+                return res_t(patterns=ptns + [self], runs=runs + [new_value], depth=depth, start=start)
+
+        # Use monkeypatch to set a clean _patterns list for this test
+        test_patterns: list[BasePattern] = []
+        monkeypatch.setattr(instantiator, "_patterns", test_patterns)
+
+        # Register the custom pattern
+        register_pattern(PrefixPattern)
+
+        # Use it in nested configuration
+        config = {
+            "greeting": [
+                "_obj_",
+                {"_addr_": "str"},
+                {"_call_": ["World"]},
+                {"_prefix_": "Hello, "},
+            ],
+            "farewell": [
+                "_obj_",
+                {"_addr_": "str"},
+                {"_call_": ["Goodbye"]},
+                {"_prefix_": "See you! "},
+            ],
+        }
+
+        result = instantiate(config)
+        assert result["greeting"] == "Hello, World"
+        assert result["farewell"] == "See you! Goodbye"
+
+    def test_custom_pattern_error_handling(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that custom pattern errors are properly raised."""
+
+        class StrictTypePattern(BasePattern):
+            """Pattern that only accepts specific types."""
+
+            check_type: str = Field(alias="_checktype_")
+
+            def build(self, result: Optional[PatternResult] = None) -> PatternResult:
+                res_t, ptns, runs, depth, start = validate_pattern_result(result)
+                if not runs:
+                    raise InstantiationError("No value to check.")
+                runs, last = runs[:-1], runs[-1]
+                expected_type = {"list": list, "dict": dict, "str": str}.get(self.check_type)
+                if expected_type is None or not isinstance(last, expected_type):
+                    raise InstantiationError(
+                        f"Type check failed: expected {self.check_type}, got {type(last).__name__}"
+                    )
+                return res_t(patterns=ptns + [self], runs=runs + [last], depth=depth, start=start)
+
+        # Use monkeypatch to set a clean _patterns list for this test
+        test_patterns: list[BasePattern] = []
+        monkeypatch.setattr(instantiator, "_patterns", test_patterns)
+        register_pattern(StrictTypePattern)
+        # This should fail type check
+        config = ["_obj_", {"_addr_": "list"}, {"_call_": []}, {"_checktype_": "dict"}]
+        with pytest.raises(InstantiationError, match="Type check failed: expected dict, got list"):
+            instantiate(config)

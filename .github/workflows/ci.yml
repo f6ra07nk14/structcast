@@ -273,9 +273,10 @@ jobs:
       - name: Run Semantic Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_PATH: /app/node_modules
         run: |
           export HOME="$(pwd)"
-          npx semantic-release
+          semantic-release
 
       - name: Check if release was created
         id: check-release

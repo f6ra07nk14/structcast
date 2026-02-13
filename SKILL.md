@@ -118,8 +118,35 @@ Create live Python objects from serializable dict/list patterns without writing 
 | Chain operations | `{"_obj_": [addr, attr, call]}` | Sequential build pipeline |
 | Recursive walk | `instantiate(nested_dict_with_patterns)` | Resolves patterns at any depth |
 | File-based import | `{"_addr_": "func", "_file_": "/path/to/mod.py"}` | Load from local `.py` file |
+| Custom patterns | `register_pattern(YourPattern)` then use `{"_your_key_": ...}` | Extend with domain-specific patterns |
 
 **Key classes**: `BasePattern` (ABC), `AddressPattern`, `AttributePattern`, `CallPattern`, `BindPattern`, `ObjectPattern`, `PatternResult`
+
+**Custom Pattern Extension**:
+
+Create domain-specific patterns by inheriting from `BasePattern`:
+
+```python
+from structcast.core.instantiator import BasePattern, PatternResult, register_pattern, validate_pattern_result
+from pydantic import Field
+from typing import Optional
+
+class MultiplyPattern(BasePattern):
+    factor: int = Field(alias="_multiply_")  # Must use Field(alias=...)
+    
+    def build(self, result: Optional[PatternResult] = None) -> PatternResult:
+        res_t, ptns, runs, depth, start = validate_pattern_result(result)  # Required
+        if not runs:
+            raise InstantiationError("No value to multiply.")
+        runs, last = runs[:-1], runs[-1]  # Extract last object from stack
+        new_value = last * self.factor
+        return res_t(patterns=ptns + [self], runs=runs + [new_value], depth=depth, start=start)
+
+register_pattern(MultiplyPattern)  # Register globally
+instantiate({"_obj_": [{"_addr_": "int"}, {"_call_": ["10"]}, {"_multiply_": 3}]})  # → 30
+```
+
+**Requirements**: Inherit `BasePattern`, use `Field(alias=...)`, implement `build()`, call `validate_pattern_result()`, return new `PatternResult` with updated `patterns` and `runs` lists. All security constraints (recursion, timeout) apply automatically.
 
 **Constraints**: Max recursion depth 100, max time 30s. All imports validated by security layer.
 
