@@ -328,8 +328,9 @@ jobs:
 
   # Publish to PyPI Job: Publishes the wheel file to PyPI after successful release
   publish-to-pypi:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[skip ci]')
-    needs: release
+    # if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[skip ci]')
+    # needs: release
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     runs-on: ubuntu-latest
     environment:
       name: pypi
