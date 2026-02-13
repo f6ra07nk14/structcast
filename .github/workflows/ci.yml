@@ -193,9 +193,9 @@ jobs:
           export XDG_CACHE_HOME=/app/.cache
           tox run-parallel --parallel all
 
-  # Cleanup Job: Delete Docker images for feature branches after successful PR merge
+  # Cleanup Job: Delete untagged Docker images and feature branch images after PR merge
   cleanup-images:
-    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -203,19 +203,27 @@ jobs:
       - name: Determine branch name
         id: branch-name
         run: |
+          # For PRs, use head_ref; for pushes, this will be empty
           BRANCH_NAME="${{ github.head_ref }}"
-          # Sanitize branch name for Docker tags (replace / with -)
-          SANITIZED_BRANCH_NAME="${BRANCH_NAME//\//-}"
-          echo "sanitized=${SANITIZED_BRANCH_NAME}" >> $GITHUB_OUTPUT
-          echo "Branch: ${BRANCH_NAME} (sanitized: ${SANITIZED_BRANCH_NAME})"
+          
+          # Only process branch-specific cleanup if this is a merged PR
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.pull_request.merged }}" = "true" ] && [ -n "${BRANCH_NAME}" ]; then
+            # Sanitize branch name for Docker tags (replace / with -)
+            SANITIZED_BRANCH_NAME="${BRANCH_NAME//\//-}"
+            echo "sanitized=${SANITIZED_BRANCH_NAME}" >> $GITHUB_OUTPUT
+            echo "Branch: ${BRANCH_NAME} (sanitized: ${SANITIZED_BRANCH_NAME})"
 
-          # Check if this is a feature branch (not dev or main)
-          if [ "${BRANCH_NAME}" != "dev" ] && [ "${BRANCH_NAME}" != "main" ]; then
-            echo "is_feature_branch=true" >> $GITHUB_OUTPUT
-            echo "✓ Feature branch detected: ${BRANCH_NAME}"
+            # Check if this is a feature branch (not dev or main)
+            if [ "${BRANCH_NAME}" != "dev" ] && [ "${BRANCH_NAME}" != "main" ]; then
+              echo "is_feature_branch=true" >> $GITHUB_OUTPUT
+              echo "✓ Feature branch detected: ${BRANCH_NAME}"
+            else
+              echo "is_feature_branch=false" >> $GITHUB_OUTPUT
+              echo "○ Skipping branch-specific cleanup for protected branch: ${BRANCH_NAME}"
+            fi
           else
             echo "is_feature_branch=false" >> $GITHUB_OUTPUT
-            echo "○ Skipping cleanup for protected branch: ${BRANCH_NAME}"
+            echo "○ Not a merged PR, skipping branch-specific cleanup"
           fi
 
       - name: Delete feature branch Docker images
@@ -266,7 +274,7 @@ jobs:
           fi
 
       - name: Delete untagged Docker images
-        if: steps.branch-name.outputs.is_feature_branch == 'false'
+        # Always run untagged image cleanup
         run: |
           REPO_OWNER="${{ github.repository_owner }}"
           REPO_NAME="${{ github.event.repository.name }}"
@@ -352,41 +360,26 @@ jobs:
   release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[skip ci]')
     runs-on: ubuntu-latest
-    needs: [test]
+    needs: [build-docker, test]
     permissions:
       contents: write
-      packages: write
+      packages: read
       pull-requests: write
       issues: write
+    container:
+      # Note: env context is not available in container.image, so we use github.repository directly
+      # Use sanitized branch name from build-docker job output to match built image tags
+      image: ghcr.io/${{ github.repository }}:${{ needs.build-docker.outputs.sanitized-branch }}-latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user root
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Install semantic-release
-        run: |
-          npm install -g semantic-release@23 \
-            @semantic-release/changelog@6 \
-            @semantic-release/git@10 \
-            @semantic-release/github@10 \
-            @semantic-release/exec@6 \
-            conventional-changelog-conventionalcommits@7
-
-      - name: Install uv
-        run: |
-          set -e
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-          # Verify uv is installed
-          export PATH="$HOME/.cargo/bin:$PATH"
-          uv --version
 
       - name: Configure Git
         run: |
@@ -397,6 +390,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          export HOME="$(pwd)"
           npx semantic-release
 
       - name: Check if release was created
@@ -447,3 +441,79 @@ jobs:
           else
             echo "Dev branch does not exist, skipping back-merge"
           fi
+
+  # Publish to TestPyPI Job: Publishes the wheel file to TestPyPI after successful release
+  publish-to-testpypi:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[skip ci]')
+    runs-on: ubuntu-latest
+    needs: release
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/structcast
+    permissions:
+      contents: read
+      id-token: write  # IMPORTANT: mandatory for trusted publishing
+    steps:
+      - name: Get latest release
+        id: get-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get the latest release information
+          RELEASE_INFO=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+                              -H "Accept: application/vnd.github+json" \
+                              "https://api.github.com/repos/${{ github.repository }}/releases/latest")
+          
+          RELEASE_TAG=$(echo "$RELEASE_INFO" | jq -r '.tag_name')
+          RELEASE_ID=$(echo "$RELEASE_INFO" | jq -r '.id')
+          
+          if [ "$RELEASE_TAG" = "null" ] || [ -z "$RELEASE_TAG" ]; then
+            echo "No release found, skipping publish"
+            echo "has_release=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_release=true" >> $GITHUB_OUTPUT
+            echo "tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
+            echo "id=$RELEASE_ID" >> $GITHUB_OUTPUT
+            echo "Found release: $RELEASE_TAG (ID: $RELEASE_ID)"
+          fi
+
+      - name: Download wheel from release
+        if: steps.get-release.outputs.has_release == 'true'
+        run: |
+          RELEASE_TAG="${{ steps.get-release.outputs.tag }}"
+          
+          # Get release assets
+          ASSETS=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+                        -H "Accept: application/vnd.github+json" \
+                        "https://api.github.com/repos/${{ github.repository }}/releases/tags/${RELEASE_TAG}")
+          
+          # Find the wheel file (.whl)
+          WHEEL_URL=$(echo "$ASSETS" | jq -r '.assets[] | select(.name | endswith(".whl")) | .browser_download_url' | head -n 1)
+          WHEEL_NAME=$(echo "$ASSETS" | jq -r '.assets[] | select(.name | endswith(".whl")) | .name' | head -n 1)
+          
+          if [ -z "$WHEEL_URL" ] || [ "$WHEEL_URL" = "null" ]; then
+            echo "No wheel file found in release"
+            exit 1
+          fi
+          
+          echo "Downloading wheel: $WHEEL_NAME"
+          echo "From: $WHEEL_URL"
+          
+          # Create dist directory and download the wheel
+          mkdir -p dist
+          curl -L -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+               -H "Accept: application/octet-stream" \
+               -o "dist/$WHEEL_NAME" \
+               "$WHEEL_URL"
+          
+          echo "✓ Successfully downloaded: dist/$WHEEL_NAME"
+          ls -lh dist/
+
+      - name: Publish to TestPyPI
+        if: steps.get-release.outputs.has_release == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+          verbose: true
+          print-hash: true
