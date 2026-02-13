@@ -279,7 +279,7 @@ class ObjectPattern(BasePattern):
         """Get the list of patterns."""
         try:
             default_ptns = [AddressPattern, AttributePattern, CallPattern, BindPattern, ObjectPattern]
-            return TypeAdapter(list[Union[tuple(_patterns + default_ptns)]]).validate_python(self.object)
+            return TypeAdapter(list[Union[tuple(_patterns + default_ptns)]]).validate_python(self.object)  # type: ignore[misc]
         except ValidationError as err:
             raise SpecError(f"Failed to validate ObjectPattern contents: {err.errors()}") from err
 
