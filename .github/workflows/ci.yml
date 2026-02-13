@@ -89,15 +89,6 @@ jobs:
           if docker manifest inspect "${IMAGE_TAG}" >/dev/null 2>&1; then
             echo "exists=true" >> $GITHUB_OUTPUT
             echo "✓ Docker image ${IMAGE_TAG} exists"
-            
-            # Extract and display manifest information
-            DIGEST=$(echo "$MANIFEST" | jq -r '.config.digest // .manifests[0].digest // "unknown"')
-            SIZE=$(echo "$MANIFEST" | jq -r '.config.size // .manifests[0].size // 0' | numfmt --to=iec-i --suffix=B 2>/dev/null || echo "unknown")
-            PLATFORM=$(echo "$MANIFEST" | jq -r '.manifests[0].platform // {os: .os, architecture: .architecture} | "\(.os // "unknown")/\(.architecture // "unknown")"')
-            
-            echo "  Digest: ${DIGEST}"
-            echo "  Size: ${SIZE}"
-            echo "  Platform: ${PLATFORM}"
           else
             echo "exists=false" >> $GITHUB_OUTPUT
             echo "✗ Docker image ${IMAGE_TAG} does not exist"
@@ -275,7 +266,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_PATH: /app/node_modules
         run: |
-          export HOME="$(pwd)"
           semantic-release
 
       - name: Check if release was created
