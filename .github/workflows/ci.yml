@@ -266,7 +266,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_PATH: /app/node_modules
         run: |
-          export HOME="$(pwd)"
           semantic-release
 
       - name: Check if release was created
