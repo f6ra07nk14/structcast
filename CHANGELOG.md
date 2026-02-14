@@ -1,3 +1,16 @@
+## [1.1.1](https://github.com/f6ra07nk14/structcast/compare/v1.1.0...v1.1.1) (2026-02-14)
+
+
+### 🔧 Fixes
+
+* improve serialization logic to handle cases where result is a dict ([58c8d07](https://github.com/f6ra07nk14/structcast/commit/58c8d07f2ac282ae4aa97b5fe1f25eff90da3ed9))
+* refactor attribute access logic to use split_attribute utility ([9f5661a](https://github.com/f6ra07nk14/structcast/commit/9f5661a0dd729892c20644ad62e173fe3c8a4935))
+
+
+### ✨ Style
+
+* cast split_attribute result to list[str] in AttributePattern ([20d384a](https://github.com/f6ra07nk14/structcast/commit/20d384a0d80efaee9e60b0454dfb9e35b8b54e05))
+
 ## [1.1.0](https://github.com/f6ra07nk14/structcast/compare/v1.0.0...v1.1.0) (2026-02-13)
 
 
