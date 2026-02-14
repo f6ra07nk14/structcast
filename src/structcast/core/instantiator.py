@@ -7,7 +7,7 @@ from functools import cached_property, partial
 from logging import getLogger
 from pathlib import Path
 from time import time
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, cast
 
 from pydantic import (
     BaseModel,
@@ -150,7 +150,7 @@ class AttributePattern(BasePattern):
             raise InstantiationError("No object to access attribute from.")
         runs, last = runs[:-1], runs[-1]
         obj = last
-        for attr in split_attribute(self.attribute):
+        for attr in cast(list[str], split_attribute(self.attribute)):
             if hasattr(obj, attr):
                 obj = getattr(obj, attr)
             else:
