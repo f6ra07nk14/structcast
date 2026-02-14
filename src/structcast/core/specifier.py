@@ -559,7 +559,9 @@ class RawSpec(_Spec):
     def _serialize_model(self, handler: SerializerFunctionWrapHandler) -> Any:
         """Serialize the model."""
         res = handler(self)
-        return res if self.has_construct_kwargs else res[_ALIAS_SPEC]
+        if isinstance(res, dict) and _ALIAS_SPEC in res:
+            return res if self.has_construct_kwargs else res[_ALIAS_SPEC]
+        return res
 
     def _get_spec(self) -> Any:
         return SpecIntermediate.convert_spec(self.raw)
@@ -627,7 +629,9 @@ class ObjectSpec(_Spec):
     def _serialize_model(self, handler: SerializerFunctionWrapHandler) -> Any:
         """Serialize the model."""
         res = handler(self)
-        return res if self.pipe else res[_ALIAS_SPEC]
+        if isinstance(res, dict) and _ALIAS_SPEC in res:
+            return res if self.pipe else res[_ALIAS_SPEC]
+        return res
 
     def _get_spec(self) -> Any:
         return self.pattern.build().runs[0]
@@ -679,7 +683,9 @@ class FlexSpec(_Spec):
     def _serialize_model(self, handler: SerializerFunctionWrapHandler) -> Any:
         """Serialize the model."""
         res = handler(self)
-        return res if self.pipe else res[_ALIAS_SPEC]
+        if isinstance(res, dict) and _ALIAS_SPEC in res:
+            return res if self.pipe else res[_ALIAS_SPEC]
+        return res
 
     def _get_spec(self) -> Any:
         def _get(structure: Any) -> Any:

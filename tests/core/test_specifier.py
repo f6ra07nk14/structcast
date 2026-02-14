@@ -654,6 +654,18 @@ class TestFlexSpec:
         assert result1 == result2
         assert result1 == 1
 
+    def test_flexspec_with_custom_model(self) -> None:
+        """Test FlexSpec with a custom Pydantic model."""
+
+        class CustomModel(BaseModel):
+            spec: FlexSpec
+
+        assert CustomModel(spec="a.b.c").model_dump() == {"spec": "a.b.c"}
+        assert CustomModel(spec=["a.b.c"]).model_dump() == {"spec": ["a.b.c"]}
+        assert CustomModel(spec=[["a.b.c"]]).model_dump() == {"spec": [["a.b.c"]]}
+        assert CustomModel(spec={"a": "a.b.c"}).model_dump() == {"spec": {"a": "a.b.c"}}
+        assert CustomModel(spec={"a": {"a": "a.b.c"}}).model_dump() == {"spec": {"a": {"a": "a.b.c"}}}
+
 
 class TestRegisterResolver:
     """Tests for register_resolver function."""
