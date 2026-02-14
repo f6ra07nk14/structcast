@@ -27,7 +27,7 @@ from structcast.core.constants import MAX_RECURSION_DEPTH, MAX_RECURSION_TIME
 from structcast.core.exceptions import InstantiationError, SpecError
 from structcast.utils.base import import_from_address, unroll_call
 from structcast.utils.dataclasses import dataclass
-from structcast.utils.security import validate_attribute
+from structcast.utils.security import split_attribute, validate_attribute
 
 logger = getLogger(__name__)
 
@@ -149,19 +149,21 @@ class AttributePattern(BasePattern):
         if not runs:
             raise InstantiationError("No object to access attribute from.")
         runs, last = runs[:-1], runs[-1]
-        obj, attrs = last, self.attribute.split(".")
-        for attr in attrs:
+        obj = last
+        for attr in split_attribute(self.attribute):
             if hasattr(obj, attr):
                 obj = getattr(obj, attr)
             else:
                 if last == obj:
-                    msg = f'Attribute "{attr}" not found in object of type {type(obj).__name__} '
-                    f"built from previous patterns: {ptns}"
-                else:
-                    msg = f'Attribute "{attr}" not found in intermediate object of type {type(obj).__name__} '
+                    raise InstantiationError(
+                        f'Attribute "{attr}" not found in object of type {type(obj).__name__} '
+                        f"built from previous patterns: {ptns}"
+                    )
+                raise InstantiationError(
+                    f'Attribute "{attr}" not found in intermediate object of type {type(obj).__name__} '
                     f'while accessing "{self.attribute}" on object of type {type(last).__name__} '
                     f"built from previous patterns: {ptns}"
-                raise InstantiationError(msg)
+                )
         return res_t(patterns=ptns + [self], runs=runs + [obj], depth=depth, start=start)
 
 
