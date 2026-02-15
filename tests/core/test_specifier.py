@@ -453,7 +453,9 @@ class TestObjectSpec:
 
     def test_objectspec_spec_property(self) -> None:
         """Test ObjectSpec spec property returns built object."""
-        assert ObjectSpec.model_validate({"_obj_": [{"_addr_": "list"}]}).spec is list
+        spec = ObjectSpec.model_validate({"_obj_": [{"_addr_": "list"}]}).spec
+        assert isinstance(spec, SpecIntermediate)
+        assert spec.value is list
 
     def test_objectspec_serialization_simple(self) -> None:
         """Test ObjectSpec serialization without pipe."""
