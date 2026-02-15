@@ -1,3 +1,11 @@
+## [1.1.2](https://github.com/f6ra07nk14/structcast/compare/v1.1.1...v1.1.2) (2026-02-15)
+
+
+### 🔧 Fixes
+
+* enhance dataclass overloads for better type hinting ([32f7d6d](https://github.com/f6ra07nk14/structcast/commit/32f7d6d8171f76125ef715aafbdd4b8231793b2b))
+* update _get_spec and _constructor methods to return SpecIntermediate and spec value ([7ea4c12](https://github.com/f6ra07nk14/structcast/commit/7ea4c123511a2567fad44e8abff27669bac0d1ef))
+
 ## [1.1.1](https://github.com/f6ra07nk14/structcast/compare/v1.1.0...v1.1.1) (2026-02-14)
 
 
