@@ -628,13 +628,15 @@ class ObjectSpec(_Spec):
 
     def _get_spec(self) -> Any:
         # return self.pattern.build().runs[0]
-        return SpecIntermediate(identifier=SPEC_CONSTANT, value=self.pattern.build().runs[0])
+        # return SpecIntermediate(identifier=SPEC_CONSTANT, value=self.pattern.build().runs[0])
+        return self.pattern.model_dump()
 
     def _constructor(self, total_depth: int) -> Callable[[Any], Any]:
+        obj = self.pattern.build().runs[0]
         if total_depth == 0:
-            return lambda _: self.casting(self.spec.value)
+            return lambda _: self.casting(obj)
         return _Constructor(
-            spec=self.spec.value,
+            spec=obj,
             total_depth=total_depth,
             casting=self.casting,
             # ObjectSpec itself does not have placeholders, but its spec may contain placeholders,
