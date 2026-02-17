@@ -28,7 +28,13 @@ from structcast.core.exceptions import SpecError
 from structcast.core.instantiator import ObjectPattern
 from structcast.utils.base import check_elements, unroll_call
 from structcast.utils.dataclasses import dataclass
-from structcast.utils.security import SecurityError, split_attribute, validate_attribute
+from structcast.utils.security import (
+    SecurityError,
+    convert_part_to_string,
+    convert_parts_to_string,
+    split_attribute,
+    validate_attribute,
+)
 
 logger = getLogger(__name__)
 
@@ -217,19 +223,6 @@ def convert_spec(cfg: Any, *, __depth__: int = 0, __start__: Optional[float] = N
     return _convert(cfg, __depth__)
 
 
-def _str_index(index: Union[int, str]) -> str:
-    if isinstance(index, int):
-        return str(index)
-    if not index.isidentifier():
-        index = index.replace('"', '\\"')
-        return f'"{index}"'
-    return index
-
-
-def _str_source(source: tuple[Union[int, str], ...]) -> str:
-    return ".".join(_str_index(i) for i in source)
-
-
 def _return_ref(data: Any) -> Any:
     return data
 
@@ -268,20 +261,20 @@ def _access_default(
             if index in target:
                 return _return_value(_access(target[index], indices), return_type=return_type)
             else:
-                i_str, s_str = _str_index(index), _str_source(source)
+                i_str, s_str = convert_part_to_string(index), convert_parts_to_string(source)
                 msg = f"Key ({i_str}) not found in mapping at source ({s_str}): {data}"
         elif isinstance(target, (list, tuple)):
             if isinstance(index, int):
                 if 0 <= index < len(target):
                     return _return_value(_access(target[index], indices), return_type=return_type)
                 else:
-                    i_str, s_str = _str_index(index), _str_source(source)
+                    i_str, s_str = convert_part_to_string(index), convert_parts_to_string(source)
                     msg = f"Index ({i_str}) out of range in sequence at source ({s_str}): {data}"
             else:
-                i_str, s_str = _str_index(index), _str_source(source)
+                i_str, s_str = convert_part_to_string(index), convert_parts_to_string(source)
                 msg = f"Non-integer index ({i_str}) used for sequence at source ({s_str}): {data}"
         else:
-            i_str, s_str = _str_index(index), _str_source(source)
+            i_str, s_str = convert_part_to_string(index), convert_parts_to_string(source)
             for data_type, accesser in accessers:
                 if isinstance(target, data_type):
                     success, value = accesser(target, index)

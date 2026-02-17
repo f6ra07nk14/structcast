@@ -319,6 +319,38 @@ def _to_index(value: str) -> Union[str, int]:
     return value
 
 
+def convert_part_to_string(part: Union[str, int]) -> str:
+    """Convert a part to a string.
+
+    If the part is an integer, it will be converted to a string.
+    If the part is a string that is not a valid identifier, it will be quoted.
+
+    Args:
+        part (str | int): The part to convert.
+
+    Returns:
+        str: The converted part.
+    """
+    if isinstance(part, int):
+        return str(part)
+    if not part.isidentifier():
+        part = part.replace('"', '\\"')
+        return f'"{part}"'
+    return part
+
+
+def convert_parts_to_string(parts: Sequence[Union[str, int]]) -> str:
+    """Convert parts to a string.
+
+    Args:
+        parts (Sequence[str | int]): The parts to convert.
+
+    Returns:
+        str: The converted string.
+    """
+    return ".".join(convert_part_to_string(i) for i in parts)
+
+
 def split_attribute(path: str) -> tuple[Union[str, int], ...]:
     """Split an attribute path into its components.
 
@@ -447,9 +479,9 @@ def resolve_address(address: str) -> tuple[Optional[str], str]:
     Returns:
         tuple[Optional[str], str]: A tuple of (module_name, target). If the module name is not specified, returns None.
     """
-    if "." in address:
-        index = address.rindex(".")
-        return address[:index], address[index + 1 :]
+    parts = split_attribute(address)
+    if len(parts) > 1:
+        return convert_parts_to_string(parts[:-1]), parts[-1]
     return None, address
 
 
