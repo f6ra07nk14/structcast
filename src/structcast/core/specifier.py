@@ -403,6 +403,10 @@ def construct(
             if sim.identifier == SPEC_SOURCE:
                 return access(raw, sim.value, **kwargs)
             return sim.value
+        try:
+            return ObjectPattern.model_validate(sim).build().runs[0]
+        except ValidationError:
+            pass
         if isinstance(sim, (dict, Mapping)):
             res_d = {k: r for k, v in sim.items() if (r := _construct(raw, v)) != SPEC_SKIP}
             return res_d if type(sim) is dict else type(sim)(**res_d)
