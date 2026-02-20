@@ -334,8 +334,7 @@ def convert_part_to_string(part: Union[str, int]) -> str:
     if isinstance(part, int):
         return str(part)
     if not part.isidentifier():
-        part = part.replace('"', '\\"')
-        return f'"{part}"'
+        return repr(part)
     return part
 
 
