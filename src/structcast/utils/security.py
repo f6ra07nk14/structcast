@@ -480,7 +480,10 @@ def resolve_address(address: str) -> tuple[Optional[str], str]:
     """
     parts = split_attribute(address)
     if len(parts) > 1:
-        return convert_parts_to_string(parts[:-1]), parts[-1]
+        module, target = parts[:-1], parts[-1]
+        if isinstance(target, int):
+            raise ValueError(f"Target part of address cannot be a numeric index: {repr(target)}")
+        return convert_parts_to_string(module), target
     return None, address
 
 
@@ -542,7 +545,7 @@ def import_from_address(
         module, module_name = default_module, default_module.__name__
     validate_import(module_name, target)
     validate_attribute(
-        f"{module_name}.{target}",
+        module_name,
         protected_member_check=protected_member_check,
         private_member_check=private_member_check,
         ascii_check=ascii_check,
