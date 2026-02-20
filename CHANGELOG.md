@@ -1,3 +1,25 @@
+## [1.1.3](https://github.com/f6ra07nk14/structcast/compare/v1.1.2...v1.1.3) (2026-02-20)
+
+
+### 🔧 Fixes
+
+* enhance construct function to validate ObjectPattern and return first run ([d273e03](https://github.com/f6ra07nk14/structcast/commit/d273e03ad232682a736308d23669c281af36c83c))
+* enhance resolve_address to validate target part and prevent numeric indices ([faa0de3](https://github.com/f6ra07nk14/structcast/commit/faa0de319ca0ef3fe5bc6f165e1296955ad1a8c1))
+* streamline instantiation logic by directly returning the first run from ObjectPattern validation ([5f25976](https://github.com/f6ra07nk14/structcast/commit/5f25976886f4c349aad951a5a6c90b654a16efd9))
+* update _get_spec and _constructor methods to use model_dump for improved data handling ([1c2a204](https://github.com/f6ra07nk14/structcast/commit/1c2a204a7a61f46a8631b9c69b90d21812a89c3f))
+* update convert_part_to_string to use repr for non-identifier parts ([dc65624](https://github.com/f6ra07nk14/structcast/commit/dc6562435ed306695e1fa64407e398e426160f7f))
+
+
+### 🔨 Refactor
+
+* add utility functions to convert parts to string for better error handling ([fc9a595](https://github.com/f6ra07nk14/structcast/commit/fc9a59581a8b003e1c908ba521c3cbf3a7c5e6eb))
+
+
+### 🚨 Tests
+
+* remove test for multiple runs error in instantiate function ([c45cd7e](https://github.com/f6ra07nk14/structcast/commit/c45cd7eb44ca4bbbaf7ddc6b6728e43b90118728))
+* simplify test for ObjectSpec spec property by asserting expected output directly ([c579017](https://github.com/f6ra07nk14/structcast/commit/c5790174d73255af1714908d0f4c38bc90b055b5))
+
 ## [1.1.2](https://github.com/f6ra07nk14/structcast/compare/v1.1.1...v1.1.2) (2026-02-15)
 
 
