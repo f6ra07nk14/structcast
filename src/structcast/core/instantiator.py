@@ -326,11 +326,7 @@ def instantiate(cfg: Any, *, __depth__: int = 0, __start__: Optional[float] = No
             return raw
         # Try to validate as pattern
         try:
-            res = ObjectPattern.model_validate(raw).build(PatternResult(depth=dep, start=__start__))
-            if len(res.runs) == 1:
-                return res.runs[0]
-            msg = f"Instantiation should result in a single object, but got {len(res.runs)}: {res.patterns}"
-            raise InstantiationError(msg)
+            return ObjectPattern.model_validate(raw).build(PatternResult(depth=dep, start=__start__)).runs[0]
         except ValidationError:
             pass
         # Pass through strings and BaseModel instances

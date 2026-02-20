@@ -707,21 +707,6 @@ class TestAdditionalCoverage:
             assert "Unrecognized configuration type" in mock_warning.call_args[0][0]
             assert "CustomType" in mock_warning.call_args[0][0]
 
-    def test_instantiate_multiple_runs_error(self) -> None:
-        """Test instantiate raises error when ObjectPattern produces multiple runs."""
-        # Mock ObjectPattern to return multiple runs
-        with patch.object(ObjectPattern, "build") as mock_build:
-            mock_build.return_value = PatternResult(
-                patterns=[],
-                runs=[list, dict],  # Multiple runs
-                depth=0,
-                start=time.time(),
-            )
-
-            cfg = {"_obj_": [{"_addr_": "list"}]}
-            with pytest.raises(InstantiationError, match="should result in a single object"):
-                instantiate(cfg)
-
     def test_recursion_time_exceeded_in_validate_pattern_result(self) -> None:
         """Test that validate_pattern_result raises error when time exceeded."""
         pattern = AddressPattern.model_validate({"_addr_": "dict"})
