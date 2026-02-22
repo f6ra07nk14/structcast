@@ -5,6 +5,7 @@ from io import StringIO
 from types import ModuleType
 from typing import Any, Callable, Optional, TypeVar, Union, cast, overload
 
+import structcast.utils.security
 from structcast.utils.security import (
     dump_yaml as __dump_yaml,
     import_from_address as __import_from_address,
@@ -155,3 +156,18 @@ def dump_yaml_to_string(data: Any) -> str:
     value = str_io.getvalue()
     str_io.close()
     return value
+
+
+__all__ = [
+    "check_elements",
+    "dump_yaml",
+    "dump_yaml_to_string",
+    "import_from_address",
+    "load_yaml",
+    "load_yaml_from_string",
+    "unroll_call",
+]
+
+
+def __dir__() -> list[str]:
+    return structcast.utils.security.get_default_dir(globals())

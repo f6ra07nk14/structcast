@@ -32,6 +32,7 @@ from structcast.utils.security import (
     SecurityError,
     convert_part_to_string,
     convert_parts_to_string,
+    get_default_dir,
     split_attribute,
     validate_attribute,
 )
@@ -751,3 +752,29 @@ class FlexSpec(_Spec):
             total_depth=total_depth,
             casting=self.casting,
         )
+
+
+__all__ = [
+    "SPEC_CONSTANT",
+    "SPEC_FORMAT",
+    "SPEC_PLACEHOLDER",
+    "SPEC_SKIP",
+    "SPEC_SOURCE",
+    "FlexSpec",
+    "ObjectSpec",
+    "RawSpec",
+    "ReturnType",
+    "SpecIntermediate",
+    "SpecSettings",
+    "WithPipe",
+    "access",
+    "configure_spec",
+    "construct",
+    "convert_spec",
+    "register_accesser",
+    "register_resolver",
+]
+
+
+def __dir__() -> list[str]:
+    return get_default_dir(globals())

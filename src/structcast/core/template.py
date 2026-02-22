@@ -19,6 +19,7 @@ from structcast.core.exceptions import InstantiationError, SpecError, Structured
 from structcast.core.instantiator import ObjectPattern
 from structcast.core.specifier import WithPipe
 from structcast.utils.dataclasses import dataclass
+from structcast.utils.security import get_default_dir
 
 if TYPE_CHECKING:
     from jinja2.ext import Extension
@@ -323,3 +324,18 @@ def extend_structure(
         return raw
 
     return _extend(data, __depth__)
+
+
+__all__ = [
+    "JinjaJsonTemplate",
+    "JinjaSettings",
+    "JinjaTemplate",
+    "JinjaYamlTemplate",
+    "configure_jinja",
+    "extend_structure",
+    "get_environment",
+]
+
+
+def __dir__() -> list[str]:
+    return get_default_dir(globals())
