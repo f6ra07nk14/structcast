@@ -1,3 +1,20 @@
+## [1.1.4](https://github.com/f6ra07nk14/structcast/compare/v1.1.3...v1.1.4) (2026-02-22)
+
+
+### 👷 Build
+
+* upgrade package dependencies ([ded847e](https://github.com/f6ra07nk14/structcast/commit/ded847e8c35d05666ea27054f741a3c228b76214))
+
+
+### 🔧 Fixes
+
+* enhance register_resolver to include ignore option for duplicate names ([6e5d5eb](https://github.com/f6ra07nk14/structcast/commit/6e5d5eb74da06e4369ff9148a0a79b8a22d4db71))
+
+
+### 🔨 Refactor
+
+* add get_default_dir function and update __dir__ methods across multiple modules ([ff32c82](https://github.com/f6ra07nk14/structcast/commit/ff32c82e986795a6303a6e08faa437a399e3cdd6))
+
 ## [1.1.3](https://github.com/f6ra07nk14/structcast/compare/v1.1.2...v1.1.3) (2026-02-20)
 
 
