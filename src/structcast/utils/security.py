@@ -15,7 +15,12 @@ from typing import IO, Any, Callable, Optional, Union, cast
 
 from ruamel.yaml import YAML
 
-from structcast.utils.constants import DEFAULT_ALLOWED_MODULES, DEFAULT_BLOCKED_MODULES, DEFAULT_DANGEROUS_DUNDERS
+from structcast.utils.constants import (
+    DEFAULT_ALLOWED_DUNDERS,
+    DEFAULT_ALLOWED_MODULES,
+    DEFAULT_BLOCKED_MODULES,
+    DEFAULT_DANGEROUS_DUNDERS,
+)
 from structcast.utils.dataclasses import dataclass
 from structcast.utils.types import PathLike
 
@@ -632,3 +637,37 @@ def dump_yaml(
             inst.instance.dump(data, fout)
     else:
         inst.instance.dump(data, stream)
+
+
+def get_default_dir(module_globals: dict[str, Any]) -> list[str]:
+    """Get the default allowed members for a module based on its globals."""
+    res = [n for n in DEFAULT_ALLOWED_DUNDERS if n in module_globals]
+    if "__all__" in module_globals:
+        res += [n for n in module_globals["__all__"] if n not in res]
+    return res
+
+
+__all__ = [
+    "SecurityError",
+    "SecuritySettings",
+    "check_path",
+    "configure_security",
+    "convert_part_to_string",
+    "convert_parts_to_string",
+    "dump_yaml",
+    "get_default_dir",
+    "import_from_address",
+    "load_yaml",
+    "load_yaml_from_stream",
+    "register_dir",
+    "resolve_address",
+    "resolve_path",
+    "split_attribute",
+    "unregister_dir",
+    "validate_attribute",
+    "validate_import",
+]
+
+
+def __dir__() -> list[str]:
+    return get_default_dir(globals())

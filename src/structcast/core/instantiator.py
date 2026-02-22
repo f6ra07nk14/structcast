@@ -27,7 +27,7 @@ from structcast.core.constants import MAX_RECURSION_DEPTH, MAX_RECURSION_TIME
 from structcast.core.exceptions import InstantiationError, SpecError
 from structcast.utils.base import import_from_address, unroll_call
 from structcast.utils.dataclasses import dataclass
-from structcast.utils.security import split_attribute, validate_attribute
+from structcast.utils.security import get_default_dir, split_attribute, validate_attribute
 
 logger = getLogger(__name__)
 
@@ -347,3 +347,21 @@ def instantiate(cfg: Any, *, __depth__: int = 0, __start__: Optional[float] = No
         return raw
 
     return _instantiate(cfg, __depth__)
+
+
+__all__ = [
+    "AddressPattern",
+    "AttributePattern",
+    "BasePattern",
+    "BindPattern",
+    "CallPattern",
+    "ObjectPattern",
+    "PatternResult",
+    "instantiate",
+    "register_pattern",
+    "validate_pattern_result",
+]
+
+
+def __dir__() -> list[str]:
+    return get_default_dir(globals())

@@ -6,6 +6,8 @@ from typing import Any, Callable, Literal, Optional, TypeVar, Union, overload
 
 from typing_extensions import dataclass_transform
 
+import structcast.utils.security
+
 T = TypeVar("T")
 
 
@@ -22,3 +24,10 @@ def dataclass(cls: Optional[type[T]] = None, **kwargs: Any) -> Union[Callable[..
     """A wrapper around dataclasses.dataclass that adds kw_only and slots parameters for Python 3.10+."""
     other_kw = {"kw_only": True, "slots": True} if version_info >= (3, 10) else {}
     return std_dataclass(cls, **{**other_kw, **kwargs})
+
+
+__all__ = ["dataclass"]
+
+
+def __dir__() -> list[str]:
+    return structcast.utils.security.get_default_dir(globals())

@@ -2,11 +2,18 @@
 
 from typing import Optional
 
+import structcast.utils.security
+
 DEFAULT_DANGEROUS_DUNDERS: set[str] = {
     *{"__subclasses__", "__bases__", "__globals__", "__code__", "__dict__"},
     *{"__class__", "__mro__", "__init__", "__import__"},
 }
 """Default dangerous dunder attributes to block during instantiation."""
+
+DEFAULT_ALLOWED_DUNDERS: set[str] = {
+    *{"__annotations__", "__doc__", "__name__", "__file__", "__path__", "__version__"},
+    *{"__all__", "__spec__", "__loader__", "__package__"},
+}
 
 DEFAULT_BLOCKED_MODULES: set[str] = {
     # --- System & Process Management ---
@@ -176,3 +183,14 @@ DEFAULT_ALLOWED_MODULES: dict[str, Optional[set[Optional[str]]]] = {
     "structcast.utils.base": {None},  # Allow all attributes from structcast.utils module
 }
 """Default allowed modules and their allowed attributes for StructCast instantiation."""
+
+__all__ = [
+    "DEFAULT_ALLOWED_DUNDERS",
+    "DEFAULT_ALLOWED_MODULES",
+    "DEFAULT_BLOCKED_MODULES",
+    "DEFAULT_DANGEROUS_DUNDERS",
+]
+
+
+def __dir__() -> list[str]:
+    return structcast.utils.security.get_default_dir(globals())
