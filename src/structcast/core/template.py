@@ -6,7 +6,7 @@ from dataclasses import field
 from functools import cached_property
 from logging import getLogger
 from time import time
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 from jinja2 import Environment, StrictUndefined, Template, Undefined
 from jinja2.meta import find_undeclared_variables
@@ -49,6 +49,9 @@ class JinjaSettings:
     extensions: list[Union[str, type["Extension"]]] = field(default_factory=lambda: ["jinja2.ext.loopcontrols"])
     """List of Jinja extensions to enable."""
 
+    filters: dict[str, Callable[..., Any]] = field(default_factory=dict)
+    """Custom Jinja filters to add to the environment."""
+
 
 _jinja_settings = JinjaSettings()
 """Global settings for Jinja templates."""
@@ -56,12 +59,14 @@ _jinja_settings = JinjaSettings()
 
 def get_environment() -> Environment:
     """Get the Jinja environment options."""
-    return _jinja_settings.environment_type(
+    env = _jinja_settings.environment_type(
         undefined=_jinja_settings.undefined_type,
         trim_blocks=_jinja_settings.trim_blocks,
         lstrip_blocks=_jinja_settings.lstrip_blocks,
         extensions=_jinja_settings.extensions,
     )
+    env.filters.update(_jinja_settings.filters)
+    return env
 
 
 def configure_jinja(
@@ -72,6 +77,7 @@ def configure_jinja(
     trim_blocks: Optional[bool] = None,
     lstrip_blocks: Optional[bool] = None,
     extensions: Optional[list[Union[str, type["Extension"]]]] = None,
+    filters: Optional[dict[str, Callable[..., Any]]] = None,
 ) -> None:
     """Configure the Jinja environment settings.
 
@@ -89,6 +95,8 @@ def configure_jinja(
             If None, use default from settings.
         extensions (list[Union[str, type[Extension]]] | None): List of Jinja extensions to enable.
             If None, use default from settings.
+        filters (dict[str, Callable[..., Any]] | None): Custom Jinja filters to add to the environment.
+            If None, use default from settings.
     """
     if settings is None:
         kwargs: dict[str, Any] = {}
@@ -102,12 +110,15 @@ def configure_jinja(
             kwargs["lstrip_blocks"] = lstrip_blocks
         if extensions is not None:
             kwargs["extensions"] = extensions
+        if filters is not None:
+            kwargs["filters"] = filters
         settings = JinjaSettings(**kwargs)
     _jinja_settings.environment_type = settings.environment_type
     _jinja_settings.undefined_type = settings.undefined_type
     _jinja_settings.trim_blocks = settings.trim_blocks
     _jinja_settings.lstrip_blocks = settings.lstrip_blocks
     _jinja_settings.extensions = settings.extensions.copy()
+    _jinja_settings.filters = settings.filters.copy()
 
 
 _ALIAS_JINJA = "_jinja_"

@@ -3,7 +3,7 @@
 from collections import OrderedDict
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any, Optional, Union
+from typing import Any, Callable, Optional, Union
 from unittest.mock import patch
 
 from jinja2 import Environment, StrictUndefined, TemplateSyntaxError, Undefined, UndefinedError
@@ -39,6 +39,7 @@ def configure_jinja_context(
     trim_blocks: Optional[bool] = None,
     lstrip_blocks: Optional[bool] = None,
     extensions: Optional[list[Union[str, type[Extension]]]] = None,
+    filters: Optional[dict[str, Callable[..., Any]]] = None,
 ) -> Generator[None, None, None]:
     """Context manager to temporarily configure Jinja environment."""
     try:
@@ -48,6 +49,7 @@ def configure_jinja_context(
             trim_blocks=trim_blocks,
             lstrip_blocks=lstrip_blocks,
             extensions=extensions,
+            filters=filters,
         )
         yield
     finally:
@@ -110,6 +112,18 @@ class TestJinjaSettings:
         assert env.undefined == StrictUndefined
         assert env.trim_blocks is True
         assert env.lstrip_blocks is True
+
+    def test_configure_jinja_custom_filters(self) -> None:
+        """Test configure_jinja registers custom filters."""
+
+        def reverse_filter(value: str) -> str:
+            return value[::-1]
+
+        with configure_jinja_context(filters={"reverse": reverse_filter}):
+            env = get_environment()
+            assert "reverse" in env.filters
+            template = JinjaTemplate.model_validate({"_jinja_": "{{ text | reverse }}"})
+            assert template(text="structcast") == "tsactcurts"
 
 
 # ============================================================================
