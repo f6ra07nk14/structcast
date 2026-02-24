@@ -1,3 +1,23 @@
+## [1.2.0](https://github.com/f6ra07nk14/structcast/compare/v1.1.4...v1.2.0) (2026-02-24)
+
+
+### 💎 Features
+
+* add checks for allowed and blocked modules in security settings ([ebbe42f](https://github.com/f6ra07nk14/structcast/commit/ebbe42f1b42bc2be3b319b9db0a3b69b5e271e1e))
+* add support for custom Jinja filters in JinjaSettings ([3dcdd6b](https://github.com/f6ra07nk14/structcast/commit/3dcdd6ba32be1c80332b16fc5433c164a54e869b))
+* expose Jinja alias constants in module exports ([ac89016](https://github.com/f6ra07nk14/structcast/commit/ac8901647e5aeaeeb49327e81e3a8a0768d2c098))
+
+
+### 🔧 Fixes
+
+* improve error handling in load_yaml_from_string function ([8041cd0](https://github.com/f6ra07nk14/structcast/commit/8041cd0596a9445034e1d35022de09f1014ceffa))
+
+
+### 🔨 Refactor
+
+* correct isinstance check for Mapping in extend_structure function ([14d0c9a](https://github.com/f6ra07nk14/structcast/commit/14d0c9a769d3e4aa1b7e2f2d40c7d472b11def45))
+* update jinja pattern resolution functions to return status and results ([bb960c4](https://github.com/f6ra07nk14/structcast/commit/bb960c47991849dbb6ae70b107213f6ecbc66257))
+
 ## [1.1.4](https://github.com/f6ra07nk14/structcast/compare/v1.1.3...v1.1.4) (2026-02-22)
 
 
