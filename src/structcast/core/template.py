@@ -324,7 +324,7 @@ def extend_structure(
         if type(raw) is dict:
             raw = _resolve_jinja_pattern_in_mapping(raw, template_kwargs=template_kwargs, default=default)
             return {k: _extend(v, dep) for k, v in raw.items()}
-        if isinstance(raw, (Mapping)):
+        if isinstance(raw, Mapping):
             cls: type = type(raw)
             raw = _resolve_jinja_pattern_in_mapping(raw, template_kwargs=template_kwargs, default=default)
             return cls(**{k: _extend(v, dep) for k, v in raw.items()})
