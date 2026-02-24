@@ -66,6 +66,12 @@ class SecuritySettings:
     If the set contains None, all members are allowed.
     """
 
+    allowed_modules_check: bool = True
+    """Whether to check the allowed modules list when validating imports."""
+
+    blocked_modules_check: bool = True
+    """Whether to check the blocked modules list when validating imports."""
+
     dangerous_dunders: set[str] = field(default_factory=lambda: deepcopy(DEFAULT_DANGEROUS_DUNDERS))
     """Set of dangerous dunder method names to block."""
 
@@ -170,6 +176,8 @@ def configure_security(
     *,
     blocked_modules: Optional[set[str]] = None,
     allowed_modules: Optional[dict[str, Optional[set[Optional[str]]]]] = None,
+    allowed_modules_check: Optional[bool] = None,
+    blocked_modules_check: Optional[bool] = None,
     dangerous_dunders: Optional[set[str]] = None,
     ascii_check: Optional[bool] = None,
     protected_member_check: Optional[bool] = None,
@@ -185,6 +193,10 @@ def configure_security(
         blocked_modules (set[str] | None): Set of module names to block. If None, use default blocked modules.
         allowed_modules (dict[str, set[str] | None] | None):
             Allowlist of module names and their allowed members. If None, use default allowed modules.
+        allowed_modules_check (bool | None): Whether to check the allowed modules list when validating imports.
+            If None, use default.
+        blocked_modules_check (bool | None): Whether to check the blocked modules list when validating imports.
+            If None, use default.
         dangerous_dunders (set[str] | None): Set of dangerous dunder method names to block. If None, use default.
         ascii_check (bool | None): Whether to block non-ASCII attribute names. If None, use default.
         protected_member_check (bool | None): Whether to block protected member access. If None, use default.
@@ -199,6 +211,10 @@ def configure_security(
             kwargs["blocked_modules"] = blocked_modules
         if allowed_modules is not None:
             kwargs["allowed_modules"] = allowed_modules
+        if allowed_modules_check is not None:
+            kwargs["allowed_modules_check"] = allowed_modules_check
+        if blocked_modules_check is not None:
+            kwargs["blocked_modules_check"] = blocked_modules_check
         if dangerous_dunders is not None:
             kwargs["dangerous_dunders"] = dangerous_dunders
         if ascii_check is not None:
@@ -214,6 +230,8 @@ def configure_security(
         settings = SecuritySettings(**kwargs)
     _security_settings.blocked_modules = settings.blocked_modules
     _security_settings.allowed_modules = settings.allowed_modules
+    _security_settings.allowed_modules_check = settings.allowed_modules_check
+    _security_settings.blocked_modules_check = settings.blocked_modules_check
     _security_settings.dangerous_dunders = settings.dangerous_dunders
     _security_settings.ascii_check = settings.ascii_check
     _security_settings.protected_member_check = settings.protected_member_check
@@ -257,22 +275,36 @@ def unregister_dir(path: PathLike) -> None:
         logger.warning(f"Directory was not registered. Skip unregistering: {path}")
 
 
-def validate_import(module_name: str, target: str) -> None:
+def validate_import(
+    module_name: str,
+    target: str,
+    *,
+    allowed_modules_check: Optional[bool] = None,
+    blocked_modules_check: Optional[bool] = None,
+) -> None:
     """Validate that an import is safe.
 
     Args:
         module_name (str): The module name to import from.
         target (str): The target name to import.
+        allowed_modules_check (bool | None): Whether to check the allowed modules list when validating imports.
+            Default is taken from global settings.
+        blocked_modules_check (bool | None): Whether to check the blocked modules list when validating imports.
+            Default is taken from global settings.
 
     Raises:
         SecurityError: If the import is blocked by security settings.
     """
+    allow_check = _security_settings.allowed_modules_check if allowed_modules_check is None else allowed_modules_check
+    block_check = _security_settings.blocked_modules_check if blocked_modules_check is None else blocked_modules_check
     allowed_members = _security_settings.allowed_modules.get(module_name, set())
-    if allowed_members is not None:
+    if allow_check and allowed_members is not None:
         if None in allowed_members or target in allowed_members:
             return
         raise SecurityError(f"Blocked import attempt (not in allowlist): {module_name}.{target}")
-    if any(n and (module_name == n or module_name.startswith(f"{n}.")) for n in _security_settings.blocked_modules):
+    if block_check and any(
+        n and (module_name == n or module_name.startswith(f"{n}.")) for n in _security_settings.blocked_modules
+    ):
         raise SecurityError(f"Blocked import attempt (blocklisted): {module_name}.{target}")
 
 
@@ -497,6 +529,8 @@ def import_from_address(
     *,
     default_module: Optional[ModuleType] = None,
     module_file: Optional[PathLike] = None,
+    allowed_modules_check: Optional[bool] = None,
+    blocked_modules_check: Optional[bool] = None,
     hidden_check: Optional[bool] = None,
     working_dir_check: Optional[bool] = None,
     protected_member_check: Optional[bool] = None,
@@ -519,6 +553,10 @@ def import_from_address(
         default_module (ModuleType | None): The default module to use if the module is not specified in the address.
             Default is None, which means the built-in module will be used.
         module_file (PathLike | None): Optional path to a module file to load the module from.
+        allowed_modules_check (bool | None): Whether to check the allowed modules list when validating imports.
+            Default is taken from global settings.
+        blocked_modules_check (bool | None): Whether to check the blocked modules list when validating imports.
+            Default is taken from global settings.
         hidden_check (bool | None): Whether to block paths with hidden directories (starting with '.').
             Default is taken from global settings.
         working_dir_check (bool | None): Whether to ensure that relative paths resolve within allowed directories.
@@ -548,7 +586,12 @@ def import_from_address(
         module, module_name = import_module("builtins"), "builtins"
     else:
         module, module_name = default_module, default_module.__name__
-    validate_import(module_name, target)
+    validate_import(
+        module_name,
+        target,
+        allowed_modules_check=allowed_modules_check,
+        blocked_modules_check=blocked_modules_check,
+    )
     validate_attribute(
         module_name,
         protected_member_check=protected_member_check,

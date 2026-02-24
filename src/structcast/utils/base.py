@@ -136,7 +136,10 @@ def load_yaml_from_string(yaml_string: str) -> Any:
     Returns:
         Any: The loaded yaml data.
     """
-    return __load_yaml_from_stream(yaml_string)
+    try:
+        return __load_yaml_from_stream(yaml_string)
+    except Exception as e:
+        raise ValueError(f"RAW STRING:\n{yaml_string}\n\nFailed to load YAML from string: {e}") from e
 
 
 def dump_yaml(data: Any, yaml_file: PathLike) -> None:
