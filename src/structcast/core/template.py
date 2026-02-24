@@ -121,11 +121,11 @@ def configure_jinja(
     _jinja_settings.filters = settings.filters.copy()
 
 
-_ALIAS_JINJA = "_jinja_"
-_ALIAS_JINJA_GROUP = "_jinja_group_"
-_ALIAS_JINJA_PIPE = "_jinja_pipe_"
-_ALIAS_JINJA_YAML = "_jinja_yaml_"
-_ALIAS_JINJA_JSON = "_jinja_json_"
+ALIAS_JINJA = "_jinja_"
+ALIAS_JINJA_GROUP = "_jinja_group_"
+ALIAS_JINJA_PIPE = "_jinja_pipe_"
+ALIAS_JINJA_YAML = "_jinja_yaml_"
+ALIAS_JINJA_JSON = "_jinja_json_"
 _YAML_LOAD_PATTERN = ["_obj_", {"_addr_": "structcast.utils.base.load_yaml_from_string"}]
 _JSON_LOAD_PATTERN = ["_obj_", {"_addr_": "json.loads"}]
 
@@ -133,10 +133,10 @@ _JSON_LOAD_PATTERN = ["_obj_", {"_addr_": "json.loads"}]
 class JinjaTemplate(WithPipe):
     """A wrapper for a Jinja template that can be used as a field in a Pydantic model."""
 
-    source: str = Field("", alias=_ALIAS_JINJA)
+    source: str = Field("", alias=ALIAS_JINJA)
     """The Jinja template source."""
 
-    pipe: list[ObjectPattern] = Field(default_factory=list, alias=_ALIAS_JINJA_PIPE)
+    pipe: list[ObjectPattern] = Field(default_factory=list, alias=ALIAS_JINJA_PIPE)
     """List of casting patterns to apply after construction."""
 
     @model_validator(mode="before")
@@ -144,11 +144,11 @@ class JinjaTemplate(WithPipe):
     def _validate_raw(cls, raw: Any) -> Any:
         if isinstance(raw, JinjaTemplate):
             return raw
-        if isinstance(raw, (list, tuple)) and raw and raw[0] == _ALIAS_JINJA:
+        if isinstance(raw, (list, tuple)) and raw and raw[0] == ALIAS_JINJA:
             if len(raw) == 2:
-                return {_ALIAS_JINJA: raw[1]}
+                return {ALIAS_JINJA: raw[1]}
             if len(raw) == 3:
-                return {_ALIAS_JINJA: raw[1], _ALIAS_JINJA_PIPE: raw[2]}
+                return {ALIAS_JINJA: raw[1], ALIAS_JINJA_PIPE: raw[2]}
             raise SpecError(f"Invalid Jinja template format: {raw}")
         return raw
 
@@ -188,21 +188,21 @@ class JinjaYamlTemplate(JinjaTemplate):
     def _validate_raw_with_yaml(cls, raw: Any) -> Any:
         if isinstance(raw, JinjaYamlTemplate):
             return raw
-        if isinstance(raw, (list, tuple)) and raw and raw[0] in {_ALIAS_JINJA_YAML, _ALIAS_JINJA}:
+        if isinstance(raw, (list, tuple)) and raw and raw[0] in {ALIAS_JINJA_YAML, ALIAS_JINJA}:
             if len(raw) == 2:
-                raw = {_ALIAS_JINJA: raw[1]}
+                raw = {ALIAS_JINJA: raw[1]}
             elif len(raw) == 3:
                 logger.warning(f"Ignoring custom pipe in JinjaYamlTemplate: {raw[2]}")
-                raw = {_ALIAS_JINJA: raw[1]}
+                raw = {ALIAS_JINJA: raw[1]}
             else:
                 raise SpecError(f"Invalid Jinja YAML template format: {raw}")
         if isinstance(raw, (dict, Mapping)):
             raw = copy(raw)  # Avoid mutating the original mapping
-            if _ALIAS_JINJA_YAML in raw:
-                raw[_ALIAS_JINJA] = raw.pop(_ALIAS_JINJA_YAML)
-            if _ALIAS_JINJA_PIPE in raw and raw[_ALIAS_JINJA_PIPE] != _YAML_LOAD_PATTERN:
-                logger.warning(f"Ignoring custom pipe in JinjaYamlTemplate: {raw[_ALIAS_JINJA_PIPE]}")
-            raw[_ALIAS_JINJA_PIPE] = _YAML_LOAD_PATTERN
+            if ALIAS_JINJA_YAML in raw:
+                raw[ALIAS_JINJA] = raw.pop(ALIAS_JINJA_YAML)
+            if ALIAS_JINJA_PIPE in raw and raw[ALIAS_JINJA_PIPE] != _YAML_LOAD_PATTERN:
+                logger.warning(f"Ignoring custom pipe in JinjaYamlTemplate: {raw[ALIAS_JINJA_PIPE]}")
+            raw[ALIAS_JINJA_PIPE] = _YAML_LOAD_PATTERN
         return raw
 
 
@@ -214,21 +214,21 @@ class JinjaJsonTemplate(JinjaTemplate):
     def _validate_raw_with_json(cls, raw: Any) -> Any:
         if isinstance(raw, JinjaJsonTemplate):
             return raw
-        if isinstance(raw, (list, tuple)) and raw and raw[0] in {_ALIAS_JINJA_JSON, _ALIAS_JINJA}:
+        if isinstance(raw, (list, tuple)) and raw and raw[0] in {ALIAS_JINJA_JSON, ALIAS_JINJA}:
             if len(raw) == 2:
-                raw = {_ALIAS_JINJA: raw[1]}
+                raw = {ALIAS_JINJA: raw[1]}
             elif len(raw) == 3:
                 logger.warning(f"Ignoring custom pipe in JinjaJsonTemplate: {raw[2]}")
-                raw = {_ALIAS_JINJA: raw[1]}
+                raw = {ALIAS_JINJA: raw[1]}
             else:
                 raise SpecError(f"Invalid Jinja JSON template format: {raw}")
         if isinstance(raw, (dict, Mapping)):
             raw = copy(raw)  # Avoid mutating the original mapping
-            if _ALIAS_JINJA_JSON in raw:
-                raw[_ALIAS_JINJA] = raw.pop(_ALIAS_JINJA_JSON)
-            if _ALIAS_JINJA_PIPE in raw and raw[_ALIAS_JINJA_PIPE] != _JSON_LOAD_PATTERN:
-                logger.warning(f"Ignoring custom pipe in JinjaJsonTemplate: {raw[_ALIAS_JINJA_PIPE]}")
-            raw[_ALIAS_JINJA_PIPE] = _JSON_LOAD_PATTERN
+            if ALIAS_JINJA_JSON in raw:
+                raw[ALIAS_JINJA] = raw.pop(ALIAS_JINJA_JSON)
+            if ALIAS_JINJA_PIPE in raw and raw[ALIAS_JINJA_PIPE] != _JSON_LOAD_PATTERN:
+                logger.warning(f"Ignoring custom pipe in JinjaJsonTemplate: {raw[ALIAS_JINJA_PIPE]}")
+            raw[ALIAS_JINJA_PIPE] = _JSON_LOAD_PATTERN
         return raw
 
 
@@ -237,54 +237,56 @@ def _resolve_jinja_pattern(
     template_kwargs: dict[str, dict[str, Any]],
     default: str,
 ) -> tuple[Mapping, Optional[Any]]:
-    find_jinja_yaml = _ALIAS_JINJA_YAML in raw
-    find_jinja_json = _ALIAS_JINJA_JSON in raw
-    find_jinja = _ALIAS_JINJA in raw
+    find_jinja_yaml = ALIAS_JINJA_YAML in raw
+    find_jinja_json = ALIAS_JINJA_JSON in raw
+    find_jinja = ALIAS_JINJA in raw
     if find_jinja_yaml + find_jinja_json + find_jinja > 1:
         raise SpecError(f"Multiple Jinja template aliases found in mapping: {raw}")
     if find_jinja_yaml:
-        alias, cls = _ALIAS_JINJA_YAML, JinjaYamlTemplate
+        alias, cls = ALIAS_JINJA_YAML, JinjaYamlTemplate
     elif find_jinja_json:
-        alias, cls = _ALIAS_JINJA_JSON, JinjaJsonTemplate
+        alias, cls = ALIAS_JINJA_JSON, JinjaJsonTemplate
     elif find_jinja:
-        alias, cls = _ALIAS_JINJA, JinjaTemplate
+        alias, cls = ALIAS_JINJA, JinjaTemplate
     else:
         return raw, None
     temp, raw = {alias: raw[alias]}, {k: v for k, v in raw.items() if k != alias}
-    group_kw = template_kwargs.get(raw.pop(_ALIAS_JINJA_GROUP, None) or default) or {}
-    if _ALIAS_JINJA_PIPE in raw:
-        temp[_ALIAS_JINJA_PIPE] = raw.pop(_ALIAS_JINJA_PIPE)
+    group_kw = template_kwargs.get(raw.pop(ALIAS_JINJA_GROUP, None) or default) or {}
+    if ALIAS_JINJA_PIPE in raw:
+        temp[ALIAS_JINJA_PIPE] = raw.pop(ALIAS_JINJA_PIPE)
     part = cls.model_validate(temp)(**group_kw)
     return raw, part
 
 
 def _resolve_jinja_pattern_in_mapping(
-    raw: Mapping,
-    template_kwargs: dict[str, dict[str, Any]],
-    default: str,
-) -> Mapping:
+    raw: Mapping, template_kwargs: dict[str, dict[str, Any]], default: str
+) -> tuple[bool, Mapping]:
     raw, part = _resolve_jinja_pattern(raw, template_kwargs=template_kwargs, default=default)
     if part is None:
-        return raw
+        return False, raw
     if isinstance(part, Mapping):
-        return {**raw, **part}
+        return True, {**raw, **part}
     raise StructuredExtensionError(f"Jinja template did not produce a mapping: {part}")
 
 
-def _resolve_jinja_pattern_in_seq(raw: Sequence, template_kwargs: dict[str, dict[str, Any]], default: str) -> list[Any]:
+def _resolve_jinja_pattern_in_seq(
+    raw: Sequence, template_kwargs: dict[str, dict[str, Any]], default: str
+) -> tuple[bool, list[Any]]:
     result = []
+    resolved = False
     for item in raw:
         if isinstance(item, (dict, Mapping)):
             item, part = _resolve_jinja_pattern(item, template_kwargs=template_kwargs, default=default)
             if part is None:
                 result.append(item)
             elif isinstance(part, (list, tuple)):
+                resolved = True
                 result.extend(part)
             else:
                 raise StructuredExtensionError(f"Jinja template did not produce a sequence: {part}")
         else:
             result.append(item)
-    return result
+    return resolved, result
 
 
 def extend_structure(
@@ -321,17 +323,14 @@ def extend_structure(
         if (time() - __start__) > MAX_RECURSION_TIME:
             raise InstantiationError(f"Maximum recursion time exceeded: {MAX_RECURSION_TIME} seconds")
         dep += 1
-        if type(raw) is dict:
-            raw = _resolve_jinja_pattern_in_mapping(raw, template_kwargs=template_kwargs, default=default)
-            return {k: _extend(v, dep) for k, v in raw.items()}
         if isinstance(raw, Mapping):
+            resolved, tmp_d = _resolve_jinja_pattern_in_mapping(raw, template_kwargs=template_kwargs, default=default)
+            tmp_d = _extend(tmp_d, dep) if resolved else {k: _extend(v, dep) for k, v in tmp_d.items()}
             cls: type = type(raw)
-            raw = _resolve_jinja_pattern_in_mapping(raw, template_kwargs=template_kwargs, default=default)
-            return cls(**{k: _extend(v, dep) for k, v in raw.items()})
+            return tmp_d if cls is dict else cls(tmp_d)
         if not isinstance(raw, str) and isinstance(raw, (list, tuple, Sequence)):
-            cls = type(raw)
-            raw = _resolve_jinja_pattern_in_seq(raw, template_kwargs=template_kwargs, default=default)
-            return cls(_extend(v, dep) for v in raw)
+            resolved, tmp_l = _resolve_jinja_pattern_in_seq(raw, template_kwargs=template_kwargs, default=default)
+            return type(raw)(_extend(tmp_l, dep) if resolved else [_extend(v, dep) for v in tmp_l])
         return raw
 
     return _extend(data, __depth__)
