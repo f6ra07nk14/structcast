@@ -337,6 +337,11 @@ def extend_structure(
 
 
 __all__ = [
+    "ALIAS_JINJA",
+    "ALIAS_JINJA_GROUP",
+    "ALIAS_JINJA_JSON",
+    "ALIAS_JINJA_PIPE",
+    "ALIAS_JINJA_YAML",
     "JinjaJsonTemplate",
     "JinjaSettings",
     "JinjaTemplate",
