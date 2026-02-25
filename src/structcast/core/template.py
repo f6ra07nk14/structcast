@@ -418,6 +418,7 @@ def extend_structure(
 
 
 __all__ = [
+    "ALIAS_ALL",
     "ALIAS_JINJA",
     "ALIAS_JINJA_GROUP",
     "ALIAS_JINJA_JSON",
