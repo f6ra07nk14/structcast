@@ -8,6 +8,7 @@ from typing import Any, Optional, Union
 from pydantic import BaseModel
 import pytest
 
+from structcast.core import specifier
 from structcast.core.constants import SPEC_SOURCE
 from structcast.core.exceptions import SpecError
 from structcast.core.instantiator import ObjectPattern
@@ -666,6 +667,80 @@ class TestFlexSpec:
         assert CustomModel(spec={"a": "a.b.c"}).model_dump() == {"spec": {"a": "a.b.c"}}
         assert CustomModel(spec={"a": {"a": "a.b.c"}}).model_dump() == {"spec": {"a": {"a": "a.b.c"}}}
 
+    def test_constructor_state_machine_paths(self) -> None:
+        """Test _Constructor state transitions for both immediate and deferred construction."""
+        direct = specifier._Constructor(
+            spec=1,
+            convert_spec=lambda data, value: value + data,
+            self_depth=0,
+            total_depth=0,
+            casting=lambda value: value * 2,
+        )
+        assert direct(2) == 6
+
+        deferred = specifier._Constructor(
+            spec=1,
+            convert_spec=lambda data, value: value + data,
+            self_depth=1,
+            total_depth=2,
+            casting=lambda value: value,
+        )
+        step = deferred(2)
+        assert isinstance(step, specifier._Constructor)
+        assert step.self_depth == 0
+        assert step.total_depth == 1
+        assert step.spec == 3
+
+    def test_rawspec_placeholder_depth_and_constructor(self) -> None:
+        """Test RawSpec placeholder-depth parsing and deferred constructor path."""
+        raw = RawSpec.model_validate("placeholder: placeholder: a.b")
+        assert raw.placeholder_depth == 2
+        assert isinstance(raw._constructor(1), specifier._Constructor)
+
+    def test_rawspec_validate_and_serializer_fallback(self) -> None:
+        """Test RawSpec validator/serializer fallback branches."""
+        raw = RawSpec.model_validate("a.b")
+        assert RawSpec._validate_raw(raw) is raw
+        assert raw._serialize_model(lambda _: "serialized") == "serialized"
+
+    def test_objectspec_validate_and_serializer_fallback(self) -> None:
+        """Test ObjectSpec validator/serializer fallback branches."""
+        obj = ObjectSpec.model_validate({"_obj_": [{"_addr_": "list"}]})
+        assert ObjectSpec._validate_pattern(obj) is obj
+        assert obj._serialize_model(lambda _: "serialized") == "serialized"
+        assert isinstance(obj._constructor(1), specifier._Constructor)
+
+    def test_flexspec_validate_structure_with_alias_key_and_instance(self) -> None:
+        """Test FlexSpec validator branches for existing instances and alias-key dictionaries."""
+        existing = FlexSpec.model_validate("a.b")
+        assert FlexSpec._validate_structure(existing) is existing
+
+        alias_data = {"_spec_": {"invalid": "structure"}}
+        assert FlexSpec._validate_structure(alias_data) == alias_data
+
+    def test_flexspec_internal_fallback_paths(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Test FlexSpec private fallback branches for unsupported structures and deferred constructors."""
+        caplog.set_level("DEBUG", logger="structcast.core.specifier")
+        weird = object()
+        flex = FlexSpec.model_construct(structure=weird, pipe=[])
+        assert flex.spec is weird
+        assert flex.placeholder_depth == 0
+        with pytest.raises(AttributeError, match="_constructor"):
+            _ = flex._constructor(1)
+        assert "unsupported type" in caplog.text
+
+    def test_flexspec_constructor_for_dict_and_list_with_placeholders(self) -> None:
+        """Test FlexSpec deferred constructor branches for dict and list structures."""
+        dict_spec = FlexSpec.model_validate({"keep": "a", "drop": "placeholder: skip:"})
+        dict_step = dict_spec({"a": 10})
+        assert isinstance(dict_step, specifier._Constructor)
+        assert dict_step({"a": 10}) == {"keep": 10}
+
+        list_spec = FlexSpec.model_validate(["a", "placeholder: skip:"])
+        list_step = list_spec({"a": 20})
+        assert isinstance(list_step, specifier._Constructor)
+        assert list_step({"a": 20}) == [20]
+
 
 class TestRegisterResolver:
     """Tests for register_resolver function."""
@@ -680,6 +755,11 @@ class TestRegisterResolver:
         register_resolver("test_unique", lambda x: x)
         with pytest.raises(ValueError, match="Resolver 'test_unique' is already registered"):
             register_resolver("test_unique", lambda x: x)
+
+    def test_register_resolver_ignore_returns_existing_id(self) -> None:
+        """Test duplicate resolver registration with ignore=True returns existing identifier."""
+        resolver_id = register_resolver("coverage_resolver", lambda x: x)
+        assert register_resolver("coverage_resolver", lambda x: f"new_{x}", ignore=True) == resolver_id
 
 
 class TestRegisterAccesser:
@@ -876,6 +956,14 @@ class TestAccessWithAttribute:
 
         assert access(SimpleClass(), (0,), support_attribute=True, raise_error=False) is None
 
+    def test_access_attribute_security_error_is_handled(self) -> None:
+        """Test attribute access catches security errors and returns None when raise_error=False."""
+
+        class Example:
+            value = 1
+
+        assert access(Example(), ("__class__",), support_attribute=True, raise_error=False) is None
+
 
 class TestConvertSpecMapping:
     """Tests for convert_spec with Mapping types."""
@@ -977,8 +1065,8 @@ class TestAccessEdgeCases:
         assert access(data, ("users", 1, "scores", 2)) == 60
 
 
-class TestWithPipeCoverage:
-    """Tests for WithPipe class coverage."""
+class TestWithPipe:
+    """Tests for WithPipe class."""
 
     def test_withpipe_non_callable_pipe_element(self) -> None:
         """Test WithPipe raises error for non-callable pipe element."""

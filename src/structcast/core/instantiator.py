@@ -11,7 +11,6 @@ from typing import Any, Optional, Union, cast
 
 from pydantic import (
     BaseModel,
-    ConfigDict,
     Field,
     FilePath,
     SerializerFunctionWrapHandler,
@@ -23,6 +22,7 @@ from pydantic import (
 )
 from typing_extensions import Self
 
+from structcast.core.base import Serializable
 from structcast.core.constants import MAX_RECURSION_DEPTH, MAX_RECURSION_TIME
 from structcast.core.exceptions import InstantiationError, SpecError
 from structcast.utils.base import import_from_address, unroll_call
@@ -49,10 +49,8 @@ class PatternResult:
     """Start time of instantiation for timeout checks."""
 
 
-class BasePattern(BaseModel, ABC):
+class BasePattern(Serializable, ABC):
     """Base class for pattern matching."""
-
-    model_config = ConfigDict(frozen=True, validate_default=True, extra="forbid", serialize_by_alias=True)
 
     @abstractmethod
     def build(self, result: Optional[PatternResult] = None) -> PatternResult:
