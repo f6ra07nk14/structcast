@@ -22,6 +22,7 @@ from structcast.core.template import (
     JinjaSettings,
     JinjaTemplate,
     JinjaYamlTemplate,
+    Parameters,
     configure_jinja,
     extend_structure,
     get_environment,
@@ -197,6 +198,35 @@ class TestJinjaTemplate:
         result = template()
         assert result == 42
         assert isinstance(result, int)
+
+    def test_configure_jinja_with_undefined_type_and_extensions(self) -> None:
+        """Test configure_jinja applies undefined_type and extensions keyword arguments."""
+        with configure_jinja_context(undefined_type=Undefined, extensions=["jinja2.ext.do"]):
+            env = get_environment()
+            assert env.undefined == Undefined
+            assert any("ExprStmtExtension" in extension for extension in env.extensions)
+
+    def test_template_validators_return_existing_instances(self) -> None:
+        """Test low-level validators return existing template instances unchanged."""
+        jt = JinjaTemplate.model_validate({"_jinja_": "{{ x }}"})
+        jy = JinjaYamlTemplate.model_validate({"_jinja_yaml_": "k: v"})
+        jj = JinjaJsonTemplate.model_validate({"_jinja_json_": '{"k": "v"}'})
+        assert JinjaTemplate._validate_raw(jt) is jt
+        assert JinjaYamlTemplate._validate_raw_with_yaml(jy) is jy
+        assert JinjaJsonTemplate._validate_raw_with_json(jj) is jj
+
+    def test_yaml_and_json_template_warn_on_custom_pipe_in_mapping(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Test mapping-form custom pipes are ignored with warnings for YAML/JSON templates."""
+        yaml_tpl = JinjaYamlTemplate.model_validate(
+            {"_jinja_yaml_": "k: v", "_jinja_pipe_": [["_obj_", {"_addr_": "str"}]]}
+        )
+        json_tpl = JinjaJsonTemplate.model_validate(
+            {"_jinja_json_": '{"k": "v"}', "_jinja_pipe_": [["_obj_", {"_addr_": "str"}]]}
+        )
+        assert yaml_tpl() == {"k": "v"}
+        assert json_tpl() == {"k": "v"}
+        assert "Ignoring custom pipe in JinjaYamlTemplate" in caplog.text
+        assert "Ignoring custom pipe in JinjaJsonTemplate" in caplog.text
 
 
 # ============================================================================
@@ -489,6 +519,11 @@ class TestExtendStructure:
         assert extend_structure(True) is True
         assert extend_structure(None) is None
 
+    def test_extend_structure_sequence_mapping_without_template_is_preserved(self) -> None:
+        """Test sequence resolver keeps mapping items without Jinja aliases unchanged."""
+        data = [{"plain": 1}, {"_jinja_": "[2, 3]", "_jinja_pipe_": [["_obj_", {"_addr_": "json.loads"}]]}]
+        assert extend_structure(data) == [{"plain": 1}, 2, 3]
+
 
 # ============================================================================
 # Test 6: Edge Cases and Error Handling
@@ -568,3 +603,27 @@ class TestEdgeCasesAndErrors:
         result = extend_structure(data)
         assert result["normal_key"] == "normal_value"
         assert result["jinja_key"] == "value"
+
+
+class TestParameters:
+    """Additional API-level coverage for template module."""
+
+    @pytest.mark.parametrize(
+        ("payload", "error"),
+        [
+            ({"_jinja_": "x"}, "reserved for template aliases"),
+            ({"group": 1}, "must be a dictionary"),
+            ({"_default_": {"k": 1}, "_shared_": {"k": 2}}, "Duplicate keys found"),
+        ],
+    )
+    def test_parameters_validation_errors(self, payload: dict[str, Any], error: str) -> None:
+        """Test Parameters validation failure branches."""
+        with pytest.raises((SpecError, ValueError), match=error):
+            Parameters.model_validate(payload)
+
+    def test_parameters_merge_accepts_parameters_instance(self) -> None:
+        """Test Parameters.merge accepts another Parameters instance."""
+        base = Parameters.model_validate({"_default_": {"a": 1}})
+        other = Parameters.model_validate({"_default_": {"b": 2}})
+        merged = base.merge(other)
+        assert merged.template_kwargs["default"] == {"a": 1, "b": 2}
