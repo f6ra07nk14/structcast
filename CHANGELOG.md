@@ -1,3 +1,27 @@
+## [1.3.0](https://github.com/f6ra07nk14/structcast/compare/v1.2.0...v1.3.0) (2026-02-25)
+
+
+### 💎 Features
+
+* add base classes for structcast configurations ([6ca3d97](https://github.com/f6ra07nk14/structcast/commit/6ca3d97e994247c92746d7170610dc94494b0785))
+* add Parameters class for enhanced template formatting and validation ([c4d836a](https://github.com/f6ra07nk14/structcast/commit/c4d836af31bb983cca6dd76455d38b4a687673f1))
+
+
+### 🔧 Fixes
+
+* ensure proper import of get_default_dir for directory retrieval ([85f7d5d](https://github.com/f6ra07nk14/structcast/commit/85f7d5db4dce0738f6fb9f458b2d84fbd2d2c431))
+* expose ALIAS_ALL in the module's __all__ for better accessibility ([5c6debc](https://github.com/f6ra07nk14/structcast/commit/5c6debc17b3ebc06bc7947718d57cdf3c0f677df))
+
+
+### 🔨 Refactor
+
+* replace BaseModel with Serializable in BasePattern and WithPipe classes ([edc4fff](https://github.com/f6ra07nk14/structcast/commit/edc4fff911ab57cbc942fe72ad1f1766ede86a17))
+
+
+### 🚨 Tests
+
+* add comprehensive tests for template functionality and parameters validation ([041dde8](https://github.com/f6ra07nk14/structcast/commit/041dde8a786f7a25a468f810316804e92b60e242))
+
 ## [1.2.0](https://github.com/f6ra07nk14/structcast/compare/v1.1.4...v1.2.0) (2026-02-24)
 
 
