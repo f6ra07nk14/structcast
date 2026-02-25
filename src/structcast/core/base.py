@@ -4,6 +4,8 @@ from typing import Any, cast
 
 from pydantic import BaseModel, ConfigDict
 
+from structcast.utils.security import get_default_dir
+
 
 class Serializable(BaseModel):
     """Base configuration."""
@@ -24,3 +26,10 @@ class WithExtra(Serializable):
             A dictionary of extra fields, or `None` if `config.extra` is not set to `"allow"`.
         """
         return cast(dict[str, Any], self.__pydantic_extra__)
+
+
+__all__ = ["Serializable", "WithExtra"]
+
+
+def __dir__() -> list[str]:
+    return get_default_dir(globals())
