@@ -11,7 +11,6 @@ from typing import Any, Callable, Optional, Union
 
 from pydantic import (
     BaseModel,
-    ConfigDict,
     Field,
     SerializerFunctionWrapHandler,
     TypeAdapter,
@@ -23,6 +22,7 @@ from pydantic import (
 )
 from typing_extensions import Self
 
+from structcast.core.base import Serializable
 from structcast.core.constants import SPEC_FORMAT, SPEC_SOURCE
 from structcast.core.exceptions import SpecError
 from structcast.core.instantiator import ObjectPattern
@@ -433,10 +433,8 @@ def _casting(value: Any, *, pipe: list[Callable[[Any], Any]]) -> Any:
     return value
 
 
-class WithPipe(BaseModel):
+class WithPipe(Serializable):
     """Model wrapper that applies a pipe of casting functions after instantiation."""
-
-    model_config = ConfigDict(frozen=True, validate_default=True, extra="forbid", serialize_by_alias=True)
 
     pipe: list[ObjectPattern] = Field(default_factory=list, alias=_ALIAS_PIPE)
     """List of casting patterns to apply after construction."""
