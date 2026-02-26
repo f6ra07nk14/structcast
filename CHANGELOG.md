@@ -1,3 +1,21 @@
+## [1.4.0](https://github.com/f6ra07nk14/structcast/compare/v1.3.0...v1.4.0) (2026-02-26)
+
+
+### 💎 Features
+
+* implement lazy loading for module imports to improve performance ([592d4f7](https://github.com/f6ra07nk14/structcast/commit/592d4f717af237232bcbf28b56d501f3e528f26a))
+
+
+### 🔨 Refactor
+
+* streamline tox configuration by removing redundant dependencies ([7033dc1](https://github.com/f6ra07nk14/structcast/commit/7033dc17f8da26721835bb961b165b6138537fcc))
+
+
+### 🚨 Tests
+
+* add YAML dumping tests for custom tag behavior and security checks ([139e976](https://github.com/f6ra07nk14/structcast/commit/139e9762adfde254155186dd643394b5aa4bee87))
+* simplify dataclass definitions by removing __init__ methods ([f0d49fd](https://github.com/f6ra07nk14/structcast/commit/f0d49fd1225856094b8da4fbb2ae787c875e54cf))
+
 ## [1.3.0](https://github.com/f6ra07nk14/structcast/compare/v1.2.0...v1.3.0) (2026-02-25)
 
 
