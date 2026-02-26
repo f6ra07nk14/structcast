@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 
 from structcast.utils.constants import DEFAULT_BLOCKED_MODULES
+import structcast.utils.security as security_module
 from structcast.utils.security import (
     SecurityError,
     check_path,
@@ -38,6 +39,41 @@ class YAMLTestClass:
         """Construct from YAML node."""
         mapping = constructor.construct_mapping(node, deep=True)
         return cls(name=mapping["name"], value=mapping["value"])
+
+
+class YAMLDumpDefaultTagClass:
+    """Test class dumped with default YAML tag behavior."""
+
+    def __init__(self, value: str) -> None:
+        self.value = value
+
+
+class YAMLDumpCustomTagClass:
+    """Test class dumped with custom yaml_tag behavior."""
+
+    yaml_tag = "!custom.yaml.tag"
+
+    def __init__(self, value: str) -> None:
+        self.value = value
+
+
+class YAMLDumpCustomToYamlClass:
+    """Test class dumped with custom to_yaml representer."""
+
+    def __init__(self, value: str) -> None:
+        self.value = value
+
+    @staticmethod
+    def to_yaml(representer: Any, data: Any) -> Any:
+        """Serialize object to custom scalar."""
+        return representer.represent_scalar("!custom.scalar", data.value)
+
+
+class _YAMLProtectedClass:
+    """Protected-name class to trigger validate_attribute checks."""
+
+    def __init__(self, value: str) -> None:
+        self.value = value
 
 
 class TestRegisterDir:
@@ -467,6 +503,53 @@ class TestDumpYaml:
             assert loaded["string"] == data["string"]
             assert loaded["int"] == data["int"]
             assert loaded["bool"] == data["bool"]
+
+    def test_dump_yaml_custom_object_uses_default_tag(self) -> None:
+        """Test dump_yaml uses default module/class YAML tag for object types."""
+        test_module = "tests.utils.test_security"
+        with configure_security_context(allowed_modules={test_module: {"YAMLDumpDefaultTagClass"}}):
+            stream = StringIO()
+            dump_yaml({"obj": YAMLDumpDefaultTagClass("value")}, stream)
+            content = stream.getvalue()
+            assert f"!{test_module}.YAMLDumpDefaultTagClass" in content
+
+    def test_dump_yaml_custom_object_uses_yaml_tag_attribute(self) -> None:
+        """Test dump_yaml uses yaml_tag when class defines it."""
+        test_module = "tests.utils.test_security"
+        with configure_security_context(allowed_modules={test_module: {"YAMLDumpCustomTagClass"}}):
+            stream = StringIO()
+            dump_yaml({"obj": YAMLDumpCustomTagClass("value")}, stream)
+            assert "!custom.yaml.tag" in stream.getvalue()
+
+    def test_dump_yaml_custom_object_uses_to_yaml_method(self) -> None:
+        """Test dump_yaml uses class to_yaml method when provided."""
+        test_module = "tests.utils.test_security"
+        with configure_security_context(allowed_modules={test_module: {"YAMLDumpCustomToYamlClass"}}):
+            stream = StringIO()
+            dump_yaml({"obj": YAMLDumpCustomToYamlClass("serialized")}, stream)
+            content = stream.getvalue()
+            assert "!custom.scalar" in content
+            assert "serialized" in content
+
+    def test_dump_yaml_rejects_protected_class_name_by_default(self) -> None:
+        """Test dump_yaml blocks class names that violate attribute checks."""
+        test_module = "tests.utils.test_security"
+        with configure_security_context(allowed_modules={test_module: {"_YAMLProtectedClass"}}):
+            stream = StringIO()
+            with pytest.raises(SecurityError, match="Protected member access attempt"):
+                dump_yaml({"obj": _YAMLProtectedClass("value")}, stream)
+
+
+def test_yaml_manager_load_representer_with_string_address() -> None:
+    """Test load_representer string-address path builds the expected tag."""
+    test_module = "tests.utils.test_security"
+    address = f"{test_module}.YAMLDumpDefaultTagClass"
+    manager = security_module.dump_yaml.__globals__["_YamlManager"]()
+    with configure_security_context(allowed_modules={test_module: {"YAMLDumpDefaultTagClass"}}):
+        manager.load_representer(None, {address})
+        stream = StringIO()
+        manager.instance.dump(YAMLDumpDefaultTagClass("value"), stream)
+    assert f"!{address}" in stream.getvalue()
 
 
 class TestValidateAttributeEdgeCases:
