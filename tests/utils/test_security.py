@@ -5,7 +5,7 @@ from datetime import date, datetime
 from io import StringIO
 import math
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -41,27 +41,26 @@ class YAMLTestClass:
         return cls(name=mapping["name"], value=mapping["value"])
 
 
+@dataclass
 class YAMLDumpDefaultTagClass:
     """Test class dumped with default YAML tag behavior."""
 
-    def __init__(self, value: str) -> None:
-        self.value = value
+    value: str
 
 
+@dataclass
 class YAMLDumpCustomTagClass:
     """Test class dumped with custom yaml_tag behavior."""
 
-    yaml_tag = "!custom.yaml.tag"
-
-    def __init__(self, value: str) -> None:
-        self.value = value
+    value: str
+    yaml_tag: ClassVar[str] = "!custom.yaml.tag"
 
 
+@dataclass
 class YAMLDumpCustomToYamlClass:
     """Test class dumped with custom to_yaml representer."""
 
-    def __init__(self, value: str) -> None:
-        self.value = value
+    value: str
 
     @staticmethod
     def to_yaml(representer: Any, data: Any) -> Any:
@@ -69,11 +68,11 @@ class YAMLDumpCustomToYamlClass:
         return representer.represent_scalar("!custom.scalar", data.value)
 
 
+@dataclass
 class _YAMLProtectedClass:
     """Protected-name class to trigger validate_attribute checks."""
 
-    def __init__(self, value: str) -> None:
-        self.value = value
+    value: str
 
 
 class TestRegisterDir:
