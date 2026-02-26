@@ -7,7 +7,7 @@ from functools import cached_property, partial
 from logging import getLogger
 from pathlib import Path
 from time import time
-from typing import Any, Optional, Union, cast
+from typing import TYPE_CHECKING, Any, Optional, Union, cast
 
 from pydantic import (
     BaseModel,
@@ -27,7 +27,7 @@ from structcast.core.constants import MAX_RECURSION_DEPTH, MAX_RECURSION_TIME
 from structcast.core.exceptions import InstantiationError, SpecError
 from structcast.utils.base import import_from_address, unroll_call
 from structcast.utils.dataclasses import dataclass
-from structcast.utils.security import get_default_dir, split_attribute, validate_attribute
+from structcast.utils.security import split_attribute, validate_attribute
 
 logger = getLogger(__name__)
 
@@ -361,5 +361,9 @@ __all__ = [
 ]
 
 
-def __dir__() -> list[str]:
-    return get_default_dir(globals())
+if not TYPE_CHECKING:
+    import sys
+
+    from structcast.utils.lazy_import import LazySelectedImporter
+
+    sys.modules[__name__] = LazySelectedImporter(__name__, globals())

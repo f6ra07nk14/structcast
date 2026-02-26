@@ -2,11 +2,9 @@
 
 from os import PathLike as _PathLike
 from pathlib import Path
-from typing import Union
+from typing import TYPE_CHECKING, Union
 
 from typing_extensions import TypeAlias
-
-import structcast.utils.security
 
 PathLike: TypeAlias = Union[str, _PathLike[str], Path]
 """Path-like object."""
@@ -14,5 +12,9 @@ PathLike: TypeAlias = Union[str, _PathLike[str], Path]
 __all__ = ["PathLike"]
 
 
-def __dir__() -> list[str]:
-    return structcast.utils.security.get_default_dir(globals())
+if not TYPE_CHECKING:
+    import sys
+
+    from structcast.utils.lazy_import import LazySelectedImporter
+
+    sys.modules[__name__] = LazySelectedImporter(__name__, globals())

@@ -10,7 +10,6 @@ from unittest.mock import patch
 from pydantic import Field, ValidationError
 import pytest
 
-from structcast.core import instantiator
 from structcast.core.constants import MAX_RECURSION_DEPTH, MAX_RECURSION_TIME
 from structcast.core.exceptions import InstantiationError, SpecError
 from structcast.core.instantiator import (
@@ -438,7 +437,7 @@ class TestInstantiateFunction:
                 self.value = 42
 
         obj = CustomType()
-        with patch("structcast.core.instantiator.logger.warning") as mock_warning:
+        with patch.object(instantiate.__globals__["logger"], "warning") as mock_warning:
             assert instantiate(obj) is obj
             mock_warning.assert_called_once()
             assert "Unrecognized configuration type" in mock_warning.call_args[0][0]
@@ -705,13 +704,13 @@ class TestTimeoutProtection:
     def test_instantiate_respects_timeout(self) -> None:
         """Test that instantiate enforces timeout limit."""
         # Create a configuration that will take longer than allowed by mocking time to simulate elapsed time
-        with patch("structcast.core.instantiator.time", side_effect=MockTime(2, time.time)):
+        with patch.dict(instantiate.__globals__, {"time": MockTime(2, time.time)}):
             with pytest.raises(InstantiationError, match="Maximum recursion time exceeded"):
                 instantiate({"a": 1, "b": 2, "c": 3})
 
     def test_instantiate_timeout_propagates_through_nested_calls(self) -> None:
         """Test that timeout is checked in nested instantiation."""
-        with patch("structcast.core.instantiator.time", side_effect=MockTime(3, time.time)):
+        with patch.dict(instantiate.__globals__, {"time": MockTime(3, time.time)}):
             with pytest.raises(InstantiationError, match="Maximum recursion time exceeded"):
                 instantiate({"outer": {"inner": {"deep": {"value": 42}}}})
 
@@ -772,7 +771,7 @@ class TestCustomPatternRegistration:
 
         # Use monkeypatch to set a clean _patterns list for this test
         test_patterns: list[BasePattern] = []
-        monkeypatch.setattr(instantiator, "_patterns", test_patterns)
+        monkeypatch.setitem(register_pattern.__globals__, "_patterns", test_patterns)
         # Register the custom pattern
         register_pattern(MultiplyPattern)
         # Verify it was registered
@@ -812,7 +811,7 @@ class TestCustomPatternRegistration:
 
         # Use monkeypatch to set a clean _patterns list for this test
         test_patterns: list[BasePattern] = []
-        monkeypatch.setattr(instantiator, "_patterns", test_patterns)
+        monkeypatch.setitem(register_pattern.__globals__, "_patterns", test_patterns)
 
         # Register the custom pattern
         register_pattern(PrefixPattern)
@@ -859,7 +858,7 @@ class TestCustomPatternRegistration:
 
         # Use monkeypatch to set a clean _patterns list for this test
         test_patterns: list[BasePattern] = []
-        monkeypatch.setattr(instantiator, "_patterns", test_patterns)
+        monkeypatch.setitem(register_pattern.__globals__, "_patterns", test_patterns)
         register_pattern(StrictTypePattern)
         # This should fail type check
         config = ["_obj_", {"_addr_": "list"}, {"_call_": []}, {"_checktype_": "dict"}]

@@ -3,9 +3,8 @@
 from collections.abc import Mapping, Sequence
 from io import StringIO
 from types import ModuleType
-from typing import Any, Callable, Optional, TypeVar, Union, cast, overload
+from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union, cast, overload
 
-import structcast.utils.security
 from structcast.utils.security import (
     dump_yaml as __dump_yaml,
     import_from_address as __import_from_address,
@@ -172,5 +171,9 @@ __all__ = [
 ]
 
 
-def __dir__() -> list[str]:
-    return structcast.utils.security.get_default_dir(globals())
+if not TYPE_CHECKING:
+    import sys
+
+    from structcast.utils.lazy_import import LazySelectedImporter
+
+    sys.modules[__name__] = LazySelectedImporter(__name__, globals())

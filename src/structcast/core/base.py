@@ -1,10 +1,8 @@
 """Base classes for structcast configurations."""
 
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import BaseModel, ConfigDict
-
-from structcast.utils.security import get_default_dir
 
 
 class Serializable(BaseModel):
@@ -31,5 +29,9 @@ class WithExtra(Serializable):
 __all__ = ["Serializable", "WithExtra"]
 
 
-def __dir__() -> list[str]:
-    return get_default_dir(globals())
+if not TYPE_CHECKING:
+    import sys
+
+    from structcast.utils.lazy_import import LazySelectedImporter
+
+    sys.modules[__name__] = LazySelectedImporter(__name__, globals())

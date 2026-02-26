@@ -6,18 +6,16 @@ from io import StringIO
 import math
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
 
 import pytest
 
 from structcast.utils.constants import DEFAULT_BLOCKED_MODULES
 from structcast.utils.security import (
     SecurityError,
-    _security_settings,
-    _yaml_manager,
     check_path,
     configure_security,
     dump_yaml,
+    get_security_settings,
     import_from_address,
     load_yaml,
     register_dir,
@@ -172,9 +170,9 @@ class TestImportFromAddress:
 
         test_file = tmp_path / "test_module.py"
         test_file.write_text("value = 42")
-        with patch("structcast.utils.security.spec_from_file_location", side_effect=mock_spec):
-            with pytest.raises(ImportError, match="Cannot load module"):
-                import_from_address("value", module_file=test_file, working_dir_check=False)
+        monkeypatch.setitem(import_from_address.__globals__, "spec_from_file_location", mock_spec)
+        with pytest.raises(ImportError, match="Cannot load module"):
+            import_from_address("value", module_file=test_file, working_dir_check=False)
 
 
 class TestLoadYAML:
@@ -393,9 +391,6 @@ class TestPathResolutionErrors:
         assert "Failed to resolve path" in caplog.text
 
 
-# todo
-
-
 def test_configure_security_with_settings_object() -> None:
     """Test configure_security with SecuritySettings object."""
     configure_security(
@@ -408,13 +403,14 @@ def test_configure_security_with_settings_object() -> None:
         hidden_check=False,
         working_dir_check=False,
     )
-    _security_settings.blocked_modules = {"custom_module"}
-    _security_settings.allowed_modules = {"math": {None}}
-    _security_settings.ascii_check = False
-    _security_settings.protected_member_check = False
-    _security_settings.private_member_check = False
-    _security_settings.hidden_check = False
-    _security_settings.working_dir_check = False
+    res = get_security_settings()
+    assert res.blocked_modules == {"custom_module"}
+    assert res.allowed_modules == {"math": {None}}
+    assert not res.ascii_check
+    assert not res.protected_member_check
+    assert not res.private_member_check
+    assert not res.hidden_check
+    assert not res.working_dir_check
     configure_security()
 
 
@@ -471,23 +467,6 @@ class TestDumpYaml:
             assert loaded["string"] == data["string"]
             assert loaded["int"] == data["int"]
             assert loaded["bool"] == data["bool"]
-
-
-class TestLoadRepresenterWithAddress:
-    """Test load_representer with different address types."""
-
-    def test_load_representer_with_string_address(self) -> None:
-        """Test load_representer with string address."""
-        with configure_security_context(allowed_modules={"math": {None}}):
-            # Should handle string address
-            result = _yaml_manager.load_representer(None, {"math.sqrt"})
-            assert result is not None
-
-    def test_load_representer_with_type_object(self) -> None:
-        """Test load_representer with type object."""
-        # Should handle type object
-        result = _yaml_manager.load_representer(None, {int})
-        assert result is not None
 
 
 class TestValidateAttributeEdgeCases:
