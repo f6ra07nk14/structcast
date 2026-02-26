@@ -2,11 +2,9 @@
 
 from dataclasses import dataclass as std_dataclass, field
 from sys import version_info
-from typing import Any, Callable, Literal, Optional, TypeVar, Union, overload
+from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, TypeVar, Union, overload
 
 from typing_extensions import dataclass_transform
-
-import structcast.utils.security
 
 T = TypeVar("T")
 
@@ -29,5 +27,9 @@ def dataclass(cls: Optional[type[T]] = None, **kwargs: Any) -> Union[Callable[..
 __all__ = ["dataclass"]
 
 
-def __dir__() -> list[str]:
-    return structcast.utils.security.get_default_dir(globals())
+if not TYPE_CHECKING:
+    import sys
+
+    from structcast.utils.lazy_import import LazySelectedImporter
+
+    sys.modules[__name__] = LazySelectedImporter(__name__, globals())

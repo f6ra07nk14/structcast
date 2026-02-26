@@ -442,10 +442,12 @@ class TestExtendStructure:
     def test_extend_structure_max_recursion_time(self) -> None:
         """Test that max recursion time is enforced."""
         # Create structure that takes too long
-        with patch("structcast.core.template.time") as mock_time:
-            mock_time.return_value = 0
-            # First call returns start time, subsequent calls return timeout
-            mock_time.side_effect = [0, MAX_RECURSION_TIME + 1]
+        values = iter([0, MAX_RECURSION_TIME + 1])
+
+        def mock_time() -> float:
+            return next(values)
+
+        with patch.dict(extend_structure.__globals__, {"time": mock_time}):
             data = {"nested": {"key": "value"}}
             with pytest.raises(InstantiationError, match="Maximum recursion time exceeded"):
                 extend_structure(data)

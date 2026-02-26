@@ -7,7 +7,7 @@ from enum import Enum
 from functools import cached_property, partial
 from logging import getLogger
 from time import time
-from typing import Any, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 from pydantic import (
     BaseModel,
@@ -32,7 +32,6 @@ from structcast.utils.security import (
     SecurityError,
     convert_part_to_string,
     convert_parts_to_string,
-    get_default_dir,
     split_attribute,
     validate_attribute,
 )
@@ -774,5 +773,9 @@ __all__ = [
 ]
 
 
-def __dir__() -> list[str]:
-    return get_default_dir(globals())
+if not TYPE_CHECKING:
+    import sys
+
+    from structcast.utils.lazy_import import LazySelectedImporter
+
+    sys.modules[__name__] = LazySelectedImporter(__name__, globals())

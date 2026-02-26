@@ -1,19 +1,14 @@
 """Constants for StructCast utilities."""
 
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-import structcast.utils.security
+from structcast.utils.lazy_import import DEFAULT_ALLOWED_DUNDERS
 
 DEFAULT_DANGEROUS_DUNDERS: set[str] = {
     *{"__subclasses__", "__bases__", "__globals__", "__code__", "__dict__"},
     *{"__class__", "__mro__", "__init__", "__import__"},
 }
 """Default dangerous dunder attributes to block during instantiation."""
-
-DEFAULT_ALLOWED_DUNDERS: set[str] = {
-    *{"__annotations__", "__doc__", "__name__", "__file__", "__path__", "__version__"},
-    *{"__all__", "__spec__", "__loader__", "__package__"},
-}
 
 DEFAULT_BLOCKED_MODULES: set[str] = {
     # --- System & Process Management ---
@@ -191,6 +186,9 @@ __all__ = [
     "DEFAULT_DANGEROUS_DUNDERS",
 ]
 
+if not TYPE_CHECKING:
+    import sys
 
-def __dir__() -> list[str]:
-    return structcast.utils.security.get_default_dir(globals())
+    from structcast.utils.lazy_import import LazySelectedImporter
+
+    sys.modules[__name__] = LazySelectedImporter(__name__, globals())

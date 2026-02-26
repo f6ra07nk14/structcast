@@ -11,17 +11,17 @@ from logging import getLogger
 from pathlib import Path
 from re import findall as re_findall, match as re_match
 from types import ModuleType
-from typing import IO, Any, Callable, Optional, Union, cast
+from typing import IO, TYPE_CHECKING, Any, Callable, Optional, Union, cast
 
 from ruamel.yaml import YAML
 
 from structcast.utils.constants import (
-    DEFAULT_ALLOWED_DUNDERS,
     DEFAULT_ALLOWED_MODULES,
     DEFAULT_BLOCKED_MODULES,
     DEFAULT_DANGEROUS_DUNDERS,
 )
 from structcast.utils.dataclasses import dataclass
+from structcast.utils.lazy_import import get_default_dir
 from structcast.utils.types import PathLike
 
 logger = getLogger(__name__)
@@ -169,6 +169,22 @@ _security_settings = SecuritySettings()
 
 _yaml_manager = _YamlManager()
 """YAML manager instance."""
+
+
+def get_security_settings() -> SecuritySettings:
+    """Get a copy of the current security settings."""
+    return SecuritySettings(
+        blocked_modules=deepcopy(_security_settings.blocked_modules),
+        allowed_modules=deepcopy(_security_settings.allowed_modules),
+        allowed_modules_check=_security_settings.allowed_modules_check,
+        blocked_modules_check=_security_settings.blocked_modules_check,
+        dangerous_dunders=deepcopy(_security_settings.dangerous_dunders),
+        ascii_check=_security_settings.ascii_check,
+        protected_member_check=_security_settings.protected_member_check,
+        private_member_check=_security_settings.private_member_check,
+        hidden_check=_security_settings.hidden_check,
+        working_dir_check=_security_settings.working_dir_check,
+    )
 
 
 def configure_security(
@@ -682,14 +698,6 @@ def dump_yaml(
         inst.instance.dump(data, stream)
 
 
-def get_default_dir(module_globals: dict[str, Any]) -> list[str]:
-    """Get the default allowed members for a module based on its globals."""
-    res = [n for n in DEFAULT_ALLOWED_DUNDERS if n in module_globals]
-    if "__all__" in module_globals:
-        res += [n for n in module_globals["__all__"] if n not in res]
-    return res
-
-
 __all__ = [
     "SecurityError",
     "SecuritySettings",
@@ -699,6 +707,7 @@ __all__ = [
     "convert_parts_to_string",
     "dump_yaml",
     "get_default_dir",
+    "get_security_settings",
     "import_from_address",
     "load_yaml",
     "load_yaml_from_stream",
@@ -712,5 +721,9 @@ __all__ = [
 ]
 
 
-def __dir__() -> list[str]:
-    return get_default_dir(globals())
+if not TYPE_CHECKING:
+    import sys
+
+    from structcast.utils.lazy_import import LazySelectedImporter
+
+    sys.modules[__name__] = LazySelectedImporter(__name__, globals())

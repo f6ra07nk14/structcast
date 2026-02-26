@@ -20,7 +20,6 @@ from structcast.core.exceptions import InstantiationError, SpecError, Structured
 from structcast.core.instantiator import ObjectPattern
 from structcast.core.specifier import WithPipe
 from structcast.utils.dataclasses import dataclass
-from structcast.utils.security import get_default_dir
 
 if TYPE_CHECKING:
     from jinja2.ext import Extension
@@ -428,11 +427,16 @@ __all__ = [
     "JinjaSettings",
     "JinjaTemplate",
     "JinjaYamlTemplate",
+    "Parameters",
     "configure_jinja",
     "extend_structure",
     "get_environment",
 ]
 
 
-def __dir__() -> list[str]:
-    return get_default_dir(globals())
+if not TYPE_CHECKING:
+    import sys
+
+    from structcast.utils.lazy_import import LazySelectedImporter
+
+    sys.modules[__name__] = LazySelectedImporter(__name__, globals())

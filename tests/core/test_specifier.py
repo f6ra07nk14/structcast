@@ -8,7 +8,6 @@ from typing import Any, Optional, Union
 from pydantic import BaseModel
 import pytest
 
-from structcast.core import specifier
 from structcast.core.constants import SPEC_SOURCE
 from structcast.core.exceptions import SpecError
 from structcast.core.instantiator import ObjectPattern
@@ -498,6 +497,15 @@ class TestObjectSpec:
         assert result1 is result2
         assert result1 is list
 
+    def test_objectspec_deferred_constructor_keeps_object_spec_constant(self) -> None:
+        """Test ObjectSpec deferred constructor branch when total_depth is greater than zero."""
+        deferred = ObjectSpec.model_validate({"_obj_": [{"_addr_": "list"}]})._constructor(1)
+        assert callable(deferred)
+        assert deferred({"dynamic": "ignored"}) is deferred
+        assert deferred.self_depth == -1
+        assert deferred.total_depth == 0
+        assert deferred({"another": "input"}) is list
+
 
 class TestFlexSpec:
     """Tests for FlexSpec class."""
@@ -667,35 +675,10 @@ class TestFlexSpec:
         assert CustomModel(spec={"a": "a.b.c"}).model_dump() == {"spec": {"a": "a.b.c"}}
         assert CustomModel(spec={"a": {"a": "a.b.c"}}).model_dump() == {"spec": {"a": {"a": "a.b.c"}}}
 
-    def test_constructor_state_machine_paths(self) -> None:
-        """Test _Constructor state transitions for both immediate and deferred construction."""
-        direct = specifier._Constructor(
-            spec=1,
-            convert_spec=lambda data, value: value + data,
-            self_depth=0,
-            total_depth=0,
-            casting=lambda value: value * 2,
-        )
-        assert direct(2) == 6
-
-        deferred = specifier._Constructor(
-            spec=1,
-            convert_spec=lambda data, value: value + data,
-            self_depth=1,
-            total_depth=2,
-            casting=lambda value: value,
-        )
-        step = deferred(2)
-        assert isinstance(step, specifier._Constructor)
-        assert step.self_depth == 0
-        assert step.total_depth == 1
-        assert step.spec == 3
-
     def test_rawspec_placeholder_depth_and_constructor(self) -> None:
         """Test RawSpec placeholder-depth parsing and deferred constructor path."""
         raw = RawSpec.model_validate("placeholder: placeholder: a.b")
         assert raw.placeholder_depth == 2
-        assert isinstance(raw._constructor(1), specifier._Constructor)
 
     def test_rawspec_validate_and_serializer_fallback(self) -> None:
         """Test RawSpec validator/serializer fallback branches."""
@@ -708,7 +691,6 @@ class TestFlexSpec:
         obj = ObjectSpec.model_validate({"_obj_": [{"_addr_": "list"}]})
         assert ObjectSpec._validate_pattern(obj) is obj
         assert obj._serialize_model(lambda _: "serialized") == "serialized"
-        assert isinstance(obj._constructor(1), specifier._Constructor)
 
     def test_flexspec_validate_structure_with_alias_key_and_instance(self) -> None:
         """Test FlexSpec validator branches for existing instances and alias-key dictionaries."""
@@ -731,14 +713,9 @@ class TestFlexSpec:
 
     def test_flexspec_constructor_for_dict_and_list_with_placeholders(self) -> None:
         """Test FlexSpec deferred constructor branches for dict and list structures."""
-        dict_spec = FlexSpec.model_validate({"keep": "a", "drop": "placeholder: skip:"})
-        dict_step = dict_spec({"a": 10})
-        assert isinstance(dict_step, specifier._Constructor)
+        dict_step = FlexSpec.model_validate({"keep": "a", "drop": "placeholder: skip:"})({"a": 10})
         assert dict_step({"a": 10}) == {"keep": 10}
-
-        list_spec = FlexSpec.model_validate(["a", "placeholder: skip:"])
-        list_step = list_spec({"a": 20})
-        assert isinstance(list_step, specifier._Constructor)
+        list_step = FlexSpec.model_validate(["a", "placeholder: skip:"])({"a": 20})
         assert list_step({"a": 20}) == [20]
 
 

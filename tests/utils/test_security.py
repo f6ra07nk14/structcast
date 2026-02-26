@@ -5,19 +5,18 @@ from datetime import date, datetime
 from io import StringIO
 import math
 from pathlib import Path
-from typing import Any
-from unittest.mock import patch
+from typing import Any, ClassVar
 
 import pytest
 
 from structcast.utils.constants import DEFAULT_BLOCKED_MODULES
+import structcast.utils.security as security_module
 from structcast.utils.security import (
     SecurityError,
-    _security_settings,
-    _yaml_manager,
     check_path,
     configure_security,
     dump_yaml,
+    get_security_settings,
     import_from_address,
     load_yaml,
     register_dir,
@@ -40,6 +39,40 @@ class YAMLTestClass:
         """Construct from YAML node."""
         mapping = constructor.construct_mapping(node, deep=True)
         return cls(name=mapping["name"], value=mapping["value"])
+
+
+@dataclass
+class YAMLDumpDefaultTagClass:
+    """Test class dumped with default YAML tag behavior."""
+
+    value: str
+
+
+@dataclass
+class YAMLDumpCustomTagClass:
+    """Test class dumped with custom yaml_tag behavior."""
+
+    value: str
+    yaml_tag: ClassVar[str] = "!custom.yaml.tag"
+
+
+@dataclass
+class YAMLDumpCustomToYamlClass:
+    """Test class dumped with custom to_yaml representer."""
+
+    value: str
+
+    @staticmethod
+    def to_yaml(representer: Any, data: Any) -> Any:
+        """Serialize object to custom scalar."""
+        return representer.represent_scalar("!custom.scalar", data.value)
+
+
+@dataclass
+class _YAMLProtectedClass:
+    """Protected-name class to trigger validate_attribute checks."""
+
+    value: str
 
 
 class TestRegisterDir:
@@ -172,9 +205,9 @@ class TestImportFromAddress:
 
         test_file = tmp_path / "test_module.py"
         test_file.write_text("value = 42")
-        with patch("structcast.utils.security.spec_from_file_location", side_effect=mock_spec):
-            with pytest.raises(ImportError, match="Cannot load module"):
-                import_from_address("value", module_file=test_file, working_dir_check=False)
+        monkeypatch.setitem(import_from_address.__globals__, "spec_from_file_location", mock_spec)
+        with pytest.raises(ImportError, match="Cannot load module"):
+            import_from_address("value", module_file=test_file, working_dir_check=False)
 
 
 class TestLoadYAML:
@@ -393,9 +426,6 @@ class TestPathResolutionErrors:
         assert "Failed to resolve path" in caplog.text
 
 
-# todo
-
-
 def test_configure_security_with_settings_object() -> None:
     """Test configure_security with SecuritySettings object."""
     configure_security(
@@ -408,13 +438,14 @@ def test_configure_security_with_settings_object() -> None:
         hidden_check=False,
         working_dir_check=False,
     )
-    _security_settings.blocked_modules = {"custom_module"}
-    _security_settings.allowed_modules = {"math": {None}}
-    _security_settings.ascii_check = False
-    _security_settings.protected_member_check = False
-    _security_settings.private_member_check = False
-    _security_settings.hidden_check = False
-    _security_settings.working_dir_check = False
+    res = get_security_settings()
+    assert res.blocked_modules == {"custom_module"}
+    assert res.allowed_modules == {"math": {None}}
+    assert not res.ascii_check
+    assert not res.protected_member_check
+    assert not res.private_member_check
+    assert not res.hidden_check
+    assert not res.working_dir_check
     configure_security()
 
 
@@ -472,22 +503,52 @@ class TestDumpYaml:
             assert loaded["int"] == data["int"]
             assert loaded["bool"] == data["bool"]
 
+    def test_dump_yaml_custom_object_uses_default_tag(self) -> None:
+        """Test dump_yaml uses default module/class YAML tag for object types."""
+        test_module = "tests.utils.test_security"
+        with configure_security_context(allowed_modules={test_module: {"YAMLDumpDefaultTagClass"}}):
+            stream = StringIO()
+            dump_yaml({"obj": YAMLDumpDefaultTagClass("value")}, stream)
+            content = stream.getvalue()
+            assert f"!{test_module}.YAMLDumpDefaultTagClass" in content
 
-class TestLoadRepresenterWithAddress:
-    """Test load_representer with different address types."""
+    def test_dump_yaml_custom_object_uses_yaml_tag_attribute(self) -> None:
+        """Test dump_yaml uses yaml_tag when class defines it."""
+        test_module = "tests.utils.test_security"
+        with configure_security_context(allowed_modules={test_module: {"YAMLDumpCustomTagClass"}}):
+            stream = StringIO()
+            dump_yaml({"obj": YAMLDumpCustomTagClass("value")}, stream)
+            assert "!custom.yaml.tag" in stream.getvalue()
 
-    def test_load_representer_with_string_address(self) -> None:
-        """Test load_representer with string address."""
-        with configure_security_context(allowed_modules={"math": {None}}):
-            # Should handle string address
-            result = _yaml_manager.load_representer(None, {"math.sqrt"})
-            assert result is not None
+    def test_dump_yaml_custom_object_uses_to_yaml_method(self) -> None:
+        """Test dump_yaml uses class to_yaml method when provided."""
+        test_module = "tests.utils.test_security"
+        with configure_security_context(allowed_modules={test_module: {"YAMLDumpCustomToYamlClass"}}):
+            stream = StringIO()
+            dump_yaml({"obj": YAMLDumpCustomToYamlClass("serialized")}, stream)
+            content = stream.getvalue()
+            assert "!custom.scalar" in content
+            assert "serialized" in content
 
-    def test_load_representer_with_type_object(self) -> None:
-        """Test load_representer with type object."""
-        # Should handle type object
-        result = _yaml_manager.load_representer(None, {int})
-        assert result is not None
+    def test_dump_yaml_rejects_protected_class_name_by_default(self) -> None:
+        """Test dump_yaml blocks class names that violate attribute checks."""
+        test_module = "tests.utils.test_security"
+        with configure_security_context(allowed_modules={test_module: {"_YAMLProtectedClass"}}):
+            stream = StringIO()
+            with pytest.raises(SecurityError, match="Protected member access attempt"):
+                dump_yaml({"obj": _YAMLProtectedClass("value")}, stream)
+
+
+def test_yaml_manager_load_representer_with_string_address() -> None:
+    """Test load_representer string-address path builds the expected tag."""
+    test_module = "tests.utils.test_security"
+    address = f"{test_module}.YAMLDumpDefaultTagClass"
+    manager = security_module.dump_yaml.__globals__["_YamlManager"]()
+    with configure_security_context(allowed_modules={test_module: {"YAMLDumpDefaultTagClass"}}):
+        manager.load_representer(None, {address})
+        stream = StringIO()
+        manager.instance.dump(YAMLDumpDefaultTagClass("value"), stream)
+    assert f"!{address}" in stream.getvalue()
 
 
 class TestValidateAttributeEdgeCases:
