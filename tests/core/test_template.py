@@ -477,7 +477,7 @@ class TestExtendStructure:
 
     def test_extend_structure_template_not_mapping_error(self) -> None:
         """Test error when template in mapping doesn't produce mapping."""
-        data = {"_jinja_": "just a string"}
+        data = {"a": "a", "_jinja_": "just a string"}
         with pytest.raises(StructuredExtensionError, match="did not produce a mapping"):
             extend_structure(data)
 
