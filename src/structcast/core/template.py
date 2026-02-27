@@ -313,10 +313,10 @@ class Parameters(WithExtra):
 
 
 def _resolve_jinja_pattern(
-    raw: Mapping,
+    raw: Mapping[str, Any],
     template_kwargs: dict[str, dict[str, Any]],
     default: str,
-) -> tuple[Mapping, Optional[Any]]:
+) -> tuple[bool, dict[str, Any], Any]:
     find_jinja_yaml = ALIAS_JINJA_YAML in raw
     find_jinja_json = ALIAS_JINJA_JSON in raw
     find_jinja = ALIAS_JINJA in raw
@@ -329,21 +329,22 @@ def _resolve_jinja_pattern(
     elif find_jinja:
         alias, cls = ALIAS_JINJA, JinjaTemplate
     else:
-        return raw, None
+        return False, raw, None
     temp, raw = {alias: raw[alias]}, {k: v for k, v in raw.items() if k != alias}
     group_kw = template_kwargs.get(raw.pop(ALIAS_JINJA_GROUP, None) or default) or {}
     if ALIAS_JINJA_PIPE in raw:
         temp[ALIAS_JINJA_PIPE] = raw.pop(ALIAS_JINJA_PIPE)
-    part = cls.model_validate(temp)(**group_kw)
-    return raw, part
+    return True, raw, cls.model_validate(temp)(**group_kw)
 
 
 def _resolve_jinja_pattern_in_mapping(
-    raw: Mapping, template_kwargs: dict[str, dict[str, Any]], default: str
+    raw: Mapping[str, Any], template_kwargs: dict[str, dict[str, Any]], default: str
 ) -> tuple[bool, Mapping]:
-    raw, part = _resolve_jinja_pattern(raw, template_kwargs=template_kwargs, default=default)
-    if part is None:
+    resolved, raw, part = _resolve_jinja_pattern(raw, template_kwargs=template_kwargs, default=default)
+    if not resolved:
         return False, raw
+    if not raw:
+        return True, part
     if isinstance(part, Mapping):
         return True, {**raw, **part}
     raise StructuredExtensionError(f"Jinja template did not produce a mapping: {part}")
@@ -351,21 +352,27 @@ def _resolve_jinja_pattern_in_mapping(
 
 def _resolve_jinja_pattern_in_seq(
     raw: Sequence, template_kwargs: dict[str, dict[str, Any]], default: str
-) -> tuple[bool, list[Any]]:
+) -> tuple[bool, list]:
     result = []
     resolved = False
     for item in raw:
-        if isinstance(item, (dict, Mapping)):
-            item, part = _resolve_jinja_pattern(item, template_kwargs=template_kwargs, default=default)
-            if part is None:
-                result.append(item)
-            elif isinstance(part, (list, tuple)):
-                resolved = True
-                result.extend(part)
-            else:
-                raise StructuredExtensionError(f"Jinja template did not produce a sequence: {part}")
-        else:
+        if not isinstance(item, Mapping):
             result.append(item)
+            continue
+        sub_resolved, raw, part = _resolve_jinja_pattern(item, template_kwargs=template_kwargs, default=default)
+        if not sub_resolved:
+            result.append(item)
+            continue
+        resolved = True
+        if raw:
+            if not isinstance(part, Mapping):
+                raise StructuredExtensionError(f"Jinja template did not produce a mapping: {part}")
+            tmp_d = {**raw, **part}
+            result.append(tmp_d if (cls := type(raw)) is dict else cls(tmp_d))
+        elif isinstance(part, (list, tuple)):
+            result.extend(part)
+        else:
+            raise StructuredExtensionError(f"Jinja template did not produce a sequence: {part}")
     return resolved, result
 
 
@@ -406,8 +413,7 @@ def extend_structure(
         if isinstance(raw, Mapping):
             resolved, tmp_d = _resolve_jinja_pattern_in_mapping(raw, template_kwargs=t_kw, default=default)
             tmp_d = _extend(tmp_d, dep) if resolved else {k: _extend(v, dep) for k, v in tmp_d.items()}
-            cls: type = type(raw)
-            return tmp_d if cls is dict else cls(tmp_d)
+            return tmp_d if (cls := type(raw)) is dict else cls(tmp_d)
         if not isinstance(raw, str) and isinstance(raw, (list, tuple, Sequence)):
             resolved, tmp_l = _resolve_jinja_pattern_in_seq(raw, template_kwargs=t_kw, default=default)
             return type(raw)(_extend(tmp_l, dep) if resolved else [_extend(v, dep) for v in tmp_l])
