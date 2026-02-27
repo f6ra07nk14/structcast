@@ -282,7 +282,7 @@ class Parameters(WithExtra):
         if isinstance(other, Parameters):
             other = other.template_kwargs
         owner = self.template_kwargs
-        return Parameters.model_validate({k: {**_get(owner, k), **_get(other, k)} for k in set(owner) | set(other)})
+        return type(self).model_validate({k: {**_get(owner, k), **_get(other, k)} for k in set(owner) | set(other)})
 
     def __or__(self, other: Optional[Union[dict[str, dict[str, Any]], "Parameters"]]) -> "Parameters":
         """Merge the given template keyword arguments with the parameters using the `|` operator.
@@ -400,7 +400,10 @@ def extend_structure(
     """
     if __start__ is None:
         __start__ = time()
-    t_kw = Parameters.create(template_kwargs).template_kwargs
+    if isinstance(template_kwargs, Parameters):
+        t_kw = template_kwargs.template_kwargs
+    else:
+        t_kw = Parameters.create(template_kwargs).template_kwargs
 
     def _extend(raw: Any, dep: int) -> Any:
         if dep >= MAX_RECURSION_DEPTH:
