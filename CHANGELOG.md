@@ -1,3 +1,24 @@
+## [1.4.1](https://github.com/f6ra07nk14/structcast/compare/v1.4.0...v1.4.1) (2026-02-27)
+
+
+### 🔧 Fixes
+
+* improves the template extension and merging logic ([4c150f4](https://github.com/f6ra07nk14/structcast/commit/4c150f485138902bf5ca51275f6cdb691da4ad8a))
+
+
+### 🔨 Refactor
+
+* enhance jinja pattern resolution logic for improved clarity and performance ([5f1bc63](https://github.com/f6ra07nk14/structcast/commit/5f1bc63c22cd710fb831ed94cd165dc733b9634e))
+* simplify Parameters class by using reduce for merging data ([a048d54](https://github.com/f6ra07nk14/structcast/commit/a048d54cdb5cf7c345736b32ad58c9e42e3cbccd))
+* streamline Parameters class merging logic by simplifying type checks ([809437d](https://github.com/f6ra07nk14/structcast/commit/809437d3a160ac4382d7846280c86d3e8a241d03))
+* update Parameters class to use type(self) for model validation and improve template_kwargs handling ([c993410](https://github.com/f6ra07nk14/structcast/commit/c99341045088f83467612bd2ba2126c9a94b10c1))
+
+
+### ✨ Style
+
+* update jinja pattern resolution to use Mapping for improved type consistency ([9ddeceb](https://github.com/f6ra07nk14/structcast/commit/9ddeceb864cd4d4ffd37648d8626efdb2bf60f4f))
+* update jinja pattern resolution to use Mapping for improved type consistency ([48b924f](https://github.com/f6ra07nk14/structcast/commit/48b924f2848f7325f2e4ef59092645182a06f01e))
+
 ## [1.4.0](https://github.com/f6ra07nk14/structcast/compare/v1.3.0...v1.4.0) (2026-02-26)
 
 
