@@ -313,7 +313,7 @@ def _resolve_jinja_pattern(
     raw: Mapping[str, Any],
     template_kwargs: dict[str, dict[str, Any]],
     default: str,
-) -> tuple[bool, dict[str, Any], Any]:
+) -> tuple[bool, Mapping[str, Any], Any]:
     find_jinja_yaml = ALIAS_JINJA_YAML in raw
     find_jinja_json = ALIAS_JINJA_JSON in raw
     find_jinja = ALIAS_JINJA in raw
@@ -356,16 +356,16 @@ def _resolve_jinja_pattern_in_seq(
         if not isinstance(item, Mapping):
             result.append(item)
             continue
-        sub_resolved, raw, part = _resolve_jinja_pattern(item, template_kwargs=template_kwargs, default=default)
+        sub_resolved, sub_raw, part = _resolve_jinja_pattern(item, template_kwargs=template_kwargs, default=default)
         if not sub_resolved:
             result.append(item)
             continue
         resolved = True
-        if raw:
+        if sub_raw:
             if not isinstance(part, Mapping):
                 raise StructuredExtensionError(f"Jinja template did not produce a mapping: {part}")
-            tmp_d = {**raw, **part}
-            result.append(tmp_d if (cls := type(raw)) is dict else cls(tmp_d))
+            tmp_d = {**sub_raw, **part}
+            result.append(tmp_d if (cls := type(sub_raw)) is dict else cls(**tmp_d))
         elif isinstance(part, (list, tuple)):
             result.extend(part)
         else:
@@ -413,7 +413,7 @@ def extend_structure(
         if isinstance(raw, Mapping):
             resolved, tmp_d = _resolve_jinja_pattern_in_mapping(raw, template_kwargs=t_kw, default=default)
             tmp_d = _extend(tmp_d, dep) if resolved else {k: _extend(v, dep) for k, v in tmp_d.items()}
-            return tmp_d if (cls := type(raw)) is dict else cls(tmp_d)
+            return tmp_d if (cls := type(raw)) is dict else cls(**tmp_d)
         if not isinstance(raw, str) and isinstance(raw, (list, tuple, Sequence)):
             resolved, tmp_l = _resolve_jinja_pattern_in_seq(raw, template_kwargs=t_kw, default=default)
             return type(raw)(_extend(tmp_l, dep) if resolved else [_extend(v, dep) for v in tmp_l])
