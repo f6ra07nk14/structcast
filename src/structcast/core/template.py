@@ -279,8 +279,7 @@ class Parameters(WithExtra):
         def _get(group: dict[str, dict[str, Any]], name: str) -> dict[str, Any]:
             return group.get(name, None) or {}
 
-        if isinstance(other, Parameters):
-            other = other.template_kwargs
+        other = (other if isinstance(other, Parameters) else type(self).model_validate(other)).template_kwargs
         owner = self.template_kwargs
         return type(self).model_validate({k: {**_get(owner, k), **_get(other, k)} for k in set(owner) | set(other)})
 
