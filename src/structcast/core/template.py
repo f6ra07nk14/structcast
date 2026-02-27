@@ -3,8 +3,9 @@
 from collections.abc import Mapping, Sequence
 from copy import copy
 from dataclasses import field
-from functools import cached_property
+from functools import cached_property, reduce
 from logging import getLogger
+from operator import or_
 from time import time
 from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
@@ -306,10 +307,7 @@ class Parameters(WithExtra):
         Returns:
             A `Parameters` instance created from the given template keyword arguments.
         """
-        res = Parameters()
-        for data in parameters:
-            res |= data
-        return res
+        return reduce(or_, parameters, cls())
 
 
 def _resolve_jinja_pattern(
