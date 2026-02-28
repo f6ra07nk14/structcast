@@ -128,6 +128,21 @@ class AddressPattern(BasePattern):
         return res_t(patterns=ptns + [self], runs=runs + [run], depth=depth, start=start)
 
 
+def _get_attr(_addr_: Any, attributes: list[str]) -> Any:
+    obj = _addr_
+    for attr in attributes:
+        if hasattr(obj, attr):
+            obj = getattr(obj, attr)
+        else:
+            if _addr_ == obj:
+                raise InstantiationError(f"Attribute '{attr}' not found in object of type {type(_addr_).__name__}")
+            raise InstantiationError(
+                f"Attribute '{attr}' not found in intermediate object of type {type(obj).__name__} "
+                f"while accessing attributes of object of type {type(_addr_).__name__}"
+            )
+    return obj
+
+
 class AttributePattern(BasePattern):
     """Pattern for accessing attributes."""
 
@@ -144,24 +159,26 @@ class AttributePattern(BasePattern):
     def build(self, result: Optional[PatternResult] = None) -> PatternResult:
         """Build the objects from the pattern."""
         res_t, ptns, runs, depth, start = validate_pattern_result(result)
-        if not runs:
-            raise InstantiationError("No object to access attribute from.")
-        runs, last = runs[:-1], runs[-1]
-        obj = last
-        for attr in cast(list[str], split_attribute(self.attribute)):
-            if hasattr(obj, attr):
-                obj = getattr(obj, attr)
-            else:
-                if last == obj:
+        attributes = cast(list[str], split_attribute(self.attribute))
+        if runs:
+            runs, last = runs[:-1], runs[-1]
+            obj = last
+            for attr in attributes:
+                if hasattr(obj, attr):
+                    obj = getattr(obj, attr)
+                else:
+                    if last == obj:
+                        raise InstantiationError(
+                            f'Attribute "{attr}" not found in object of type {type(obj).__name__} '
+                            f"built from previous patterns: {ptns}"
+                        )
                     raise InstantiationError(
-                        f'Attribute "{attr}" not found in object of type {type(obj).__name__} '
+                        f'Attribute "{attr}" not found in intermediate object of type {type(obj).__name__} '
+                        f'while accessing "{self.attribute}" on object of type {type(last).__name__} '
                         f"built from previous patterns: {ptns}"
                     )
-                raise InstantiationError(
-                    f'Attribute "{attr}" not found in intermediate object of type {type(obj).__name__} '
-                    f'while accessing "{self.attribute}" on object of type {type(last).__name__} '
-                    f"built from previous patterns: {ptns}"
-                )
+        else:
+            obj = partial(_get_attr, attributes=attributes)
         return res_t(patterns=ptns + [self], runs=runs + [obj], depth=depth, start=start)
 
 
