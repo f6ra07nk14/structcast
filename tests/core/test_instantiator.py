@@ -164,8 +164,10 @@ class TestPatternBuild:
 
     def test_attribute_pattern_build_no_object(self) -> None:
         """Test AttributePattern.build fails with no object."""
-        with pytest.raises(InstantiationError, match="No object to access attribute"):
-            AttributePattern.model_validate({"_attr_": "append"}).build()
+        res = AttributePattern.model_validate({"_attr_": "append"}).build().runs[0]
+        assert callable(res)
+        data: list = []
+        assert res(data) == data.append
 
     def test_attribute_pattern_build_missing_attribute(self) -> None:
         """Test AttributePattern.build fails with missing attribute."""
