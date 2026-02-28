@@ -1,3 +1,11 @@
+## [1.5.0](https://github.com/f6ra07nk14/structcast/compare/v1.4.1...v1.5.0) (2026-02-28)
+
+
+### 💎 Features
+
+* add support for object pattern matching in specification configuration ([9508fcd](https://github.com/f6ra07nk14/structcast/commit/9508fcd168edf829210438da2f7e99611587e46a))
+* enhance AttributePattern.build to handle callable attributes and improve error messaging ([d5bb2bf](https://github.com/f6ra07nk14/structcast/commit/d5bb2bf229a68717dbedd979d24291e1958b2acf))
+
 ## [1.4.1](https://github.com/f6ra07nk14/structcast/compare/v1.4.0...v1.4.1) (2026-02-27)
 
 
