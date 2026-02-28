@@ -62,6 +62,9 @@ class SpecSettings:
     support_attribute: bool = True
     """Whether to support attribute access on objects."""
 
+    support_object_pattern: bool = True
+    """Whether to support object pattern matching for construction."""
+
     raise_error: bool = False
     """Whether to raise an error when access fails."""
 
@@ -118,6 +121,7 @@ def configure_spec(
     *,
     support_basemodel: Optional[bool] = None,
     support_attribute: Optional[bool] = None,
+    support_object_pattern: Optional[bool] = None,
     raise_error: Optional[bool] = None,
     return_type: Optional[ReturnType] = None,
 ) -> None:
@@ -131,6 +135,8 @@ def configure_spec(
             If None, the setting is not changed.
         support_attribute (bool | None, optional): Whether to support attribute access on objects.
             If None, the setting is not changed.
+        support_object_pattern (bool | None, optional): Whether to support object pattern matching for construction.
+            If None, the setting is not changed.
         raise_error (bool | None, optional): Whether to raise an error when access fails.
             If None, the setting is not changed.
         return_type (ReturnType | None, optional): The default return type for access operations.
@@ -142,6 +148,8 @@ def configure_spec(
             kwargs["support_basemodel"] = support_basemodel
         if support_attribute is not None:
             kwargs["support_attribute"] = support_attribute
+        if support_object_pattern is not None:
+            kwargs["support_object_pattern"] = support_object_pattern
         if raise_error is not None:
             kwargs["raise_error"] = raise_error
         if return_type is not None:
@@ -149,6 +157,7 @@ def configure_spec(
         settings = SpecSettings(**kwargs)
     _spec_settings.support_basemodel = settings.support_basemodel
     _spec_settings.support_attribute = settings.support_attribute
+    _spec_settings.support_object_pattern = settings.support_object_pattern
     _spec_settings.raise_error = settings.raise_error
     _spec_settings.return_type = settings.return_type
 
@@ -364,6 +373,7 @@ def construct(
     return_type: Optional[ReturnType] = None,
     support_basemodel: Optional[bool] = None,
     support_attribute: Optional[bool] = None,
+    support_object_pattern: Optional[bool] = None,
     accessers: Optional[list[tuple[type, Callable[[Any, Union[str, int]], tuple[bool, Any]]]]] = None,
     raise_error: Optional[bool] = None,
 ) -> Any:
@@ -378,6 +388,8 @@ def construct(
             Default is taken from global settings.
         support_attribute (bool | None, optional): Whether to support attribute access on objects.
             Default is taken from global settings.
+        support_object_pattern (bool | None, optional): Whether to support object pattern matching for construction.
+            Default is taken from global settings.
         accessers (list[tuple[type, Callable[[Any, int | str], tuple[bool, Any]]]] | None, optional):
             A custom list of type-accesser pairs to use for accessing data.
             Each accesser is a callable that takes an instance and an index,
@@ -391,6 +403,7 @@ def construct(
     Raises:
         AccessError: If access fails and raise_error is True.
     """
+    use_obj_ptn = _spec_settings.support_object_pattern if support_object_pattern is None else support_object_pattern
     kwargs: dict[str, Any] = {
         "return_type": return_type,
         "support_basemodel": support_basemodel,
@@ -406,10 +419,11 @@ def construct(
             if sim.identifier == SPEC_SOURCE:
                 return access(raw, sim.value, **kwargs)
             return sim.value
-        try:
-            return ObjectPattern.model_validate(sim).build().runs[0]
-        except ValidationError:
-            pass
+        if use_obj_ptn:
+            try:
+                return ObjectPattern.model_validate(sim).build().runs[0]
+            except ValidationError:
+                pass
         if isinstance(sim, (dict, Mapping)):
             res_d = {k: r for k, v in sim.items() if (r := _construct(raw, v)) != SPEC_SKIP}
             return res_d if type(sim) is dict else type(sim)(**res_d)
@@ -545,6 +559,9 @@ class RawSpec(_Spec):
     raise_error: Optional[bool] = None
     """Whether to raise an error when picking fails."""
 
+    support_object_pattern: Optional[bool] = None
+    """Whether to support object pattern matching for construction."""
+
     @model_validator(mode="before")
     @classmethod
     def _validate_raw(cls, raw: Any) -> Any:
@@ -591,6 +608,7 @@ class RawSpec(_Spec):
             "support_basemodel": self.support_basemodel,
             "support_attribute": self.support_attribute,
             "raise_error": self.raise_error,
+            "support_object_pattern": self.support_object_pattern,
         }
 
     def _constructor(self, total_depth: int) -> Callable[[Any], Any]:
