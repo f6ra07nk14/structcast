@@ -526,6 +526,42 @@ class TestExtendStructure:
         data = [{"plain": 1}, {"_jinja_": "[2, 3]", "_jinja_pipe_": [["_obj_", {"_addr_": "json.loads"}]]}]
         assert extend_structure(data) == [{"plain": 1}, 2, 3]
 
+    def test_extend_structure_group_without_template_alias_stripped_with_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test that _jinja_group_ without a template alias is stripped and a warning is logged."""
+        data = {"key": "value", "_jinja_group_": "my_group"}
+        with caplog.at_level("WARNING"):
+            result = extend_structure(data, template_kwargs={"my_group": {"x": 1}})
+        assert result == {"key": "value"}
+        assert "_jinja_group_" not in result
+        assert "Ignoring Jinja group and pipe without template alias" in caplog.text
+
+    def test_extend_structure_pipe_without_template_alias_stripped_with_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test that _jinja_pipe_ without a template alias is stripped and a warning is logged."""
+        pipe = [["_obj_", {"_addr_": "json.loads"}]]
+        data = {"key": "value", "_jinja_pipe_": pipe}
+        with caplog.at_level("WARNING"):
+            result = extend_structure(data)
+        assert result == {"key": "value"}
+        assert "_jinja_pipe_" not in result
+        assert "Ignoring Jinja group and pipe without template alias" in caplog.text
+
+    def test_extend_structure_group_and_pipe_without_template_alias_stripped_with_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test that _jinja_group_ and _jinja_pipe_ together without a template alias are both stripped."""
+        pipe = [["_obj_", {"_addr_": "json.loads"}]]
+        data = {"key": "value", "_jinja_group_": "my_group", "_jinja_pipe_": pipe}
+        with caplog.at_level("WARNING"):
+            result = extend_structure(data, template_kwargs={"my_group": {"x": 1}})
+        assert result == {"key": "value"}
+        assert "_jinja_group_" not in result
+        assert "_jinja_pipe_" not in result
+        assert "Ignoring Jinja group and pipe without template alias" in caplog.text
+
 
 # ============================================================================
 # Test 6: Edge Cases and Error Handling
