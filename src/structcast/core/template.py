@@ -319,6 +319,8 @@ def _resolve_jinja_pattern(
     find_jinja = ALIAS_JINJA in raw
     if find_jinja_yaml + find_jinja_json + find_jinja > 1:
         raise SpecError(f"Multiple Jinja template aliases found in mapping: {raw}")
+    find_jinja_group = ALIAS_JINJA_GROUP in raw
+    find_jinja_pipe = ALIAS_JINJA_PIPE in raw
     if find_jinja_yaml:
         alias, cls = ALIAS_JINJA_YAML, JinjaYamlTemplate
     elif find_jinja_json:
@@ -326,6 +328,9 @@ def _resolve_jinja_pattern(
     elif find_jinja:
         alias, cls = ALIAS_JINJA, JinjaTemplate
     else:
+        if find_jinja_group or find_jinja_pipe:
+            raw = {k: v for k, v in raw.items() if k not in (ALIAS_JINJA_GROUP, ALIAS_JINJA_PIPE)}
+            logger.warning(f"Ignoring Jinja group and pipe without template alias in mapping: {raw}")
         return False, raw, None
     temp, raw = {alias: raw[alias]}, {k: v for k, v in raw.items() if k != alias}
     group_kw = template_kwargs.get(raw.pop(ALIAS_JINJA_GROUP, None) or default) or {}
