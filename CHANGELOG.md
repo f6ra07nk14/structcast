@@ -1,3 +1,10 @@
+## [1.5.1](https://github.com/f6ra07nk14/structcast/compare/v1.5.0...v1.5.1) (2026-03-11)
+
+
+### 🔧 Fixes
+
+* enhance _resolve_jinja_pattern to handle Jinja group and pipe aliases ([b1693e2](https://github.com/f6ra07nk14/structcast/commit/b1693e273857fbb24467fab8fc49078c4083d6b2))
+
 ## [1.5.0](https://github.com/f6ra07nk14/structcast/compare/v1.4.1...v1.5.0) (2026-02-28)
 
 
