@@ -1,3 +1,3 @@
 """StructCast: Elegantly orchestrating structured data via a flexible and serializable workflow."""
 
-__version__ = "1.5.1"
+__version__ = "2.0.0"

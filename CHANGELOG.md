@@ -1,3 +1,57 @@
+## [2.0.0](https://github.com/f6ra07nk14/structcast/compare/v1.5.1...v2.0.0) (2026-08-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* **utils:** structcast.utils.security and structcast.utils.constants no
+longer exist; import from structcast.utils.base instead. check_path is renamed
+find_path.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+* **utils:** allowed_modules, blocked_modules, allowed_modules_check,
+blocked_modules_check, hidden_check and working_dir_check are gone from
+SecuritySettings and configure_security, validate_import() is removed, and
+addresses are no longer restricted by an allowlist. Do not load configuration
+from untrusted sources.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+
+### 💥 Breaking Changes
+
+* **utils:** remove module allow/block lists and path confinement checks ([9aff5ad](https://github.com/f6ra07nk14/structcast/commit/9aff5adbc7c8b7a9caa0f122d20f3eaacf2e3fcd))
+
+
+### 👷 Build
+
+* upgrade package dependencies ([99281b6](https://github.com/f6ra07nk14/structcast/commit/99281b69a54c66c3d3e610d2717d2ae920774e55))
+
+
+### 📦 Other
+
+* add Dockerfile and devcontainer configuration for codex-cli development environment ([414e9f7](https://github.com/f6ra07nk14/structcast/commit/414e9f7570cab7b962a10558ac974da7352d9cec))
+* add ponytail plugin installation to Claude setup ([dd400c8](https://github.com/f6ra07nk14/structcast/commit/dd400c836640042cc9d439adbfcf91660a8d5aef))
+* add skills ([f0f4ca2](https://github.com/f6ra07nk14/structcast/commit/f0f4ca21d1fdbb4f3ecd4a36a456933607dcb722))
+* update .gitignore to exclude Claude configuration and skills symlink ([f9f495c](https://github.com/f6ra07nk14/structcast/commit/f9f495cf4b7100e85d4a4cb993928fab3284e062))
+* update Dockerfile and post-create.sh for improved environment setup ([0a49f5a](https://github.com/f6ra07nk14/structcast/commit/0a49f5a479b03f66faa1e75992107ac454dddf3a))
+* update worktree guidelines for improved project structure ([1091beb](https://github.com/f6ra07nk14/structcast/commit/1091beb87fb9fdcea468a8815ec13254ce5e934a))
+
+
+### 📔 Docs
+
+* add agent guidelines and skill configuration ([c1ce0fc](https://github.com/f6ra07nk14/structcast/commit/c1ce0fcb374b7dca7670404200b7d050c06637bb))
+* reposition security model as trusted-input ([b472c71](https://github.com/f6ra07nk14/structcast/commit/b472c71b40046d34228c13454098af8f72b7d17a))
+
+
+### 🔧 Fixes
+
+* **utils:** close YAML multi-constructor leak and validate module path before import ([7b97fe5](https://github.com/f6ra07nk14/structcast/commit/7b97fe58b84d881f3c9998ba344a532edd082462))
+* **utils:** let dump_yaml create files that do not exist yet ([978c4a5](https://github.com/f6ra07nk14/structcast/commit/978c4a5723bb493cb50a942958546c275951216a))
+
+
+### 🔨 Refactor
+
+* **utils:** merge security into base and rename check_path to find_path ([bd66404](https://github.com/f6ra07nk14/structcast/commit/bd664041d0df6d2a57b2d6556a65f6d244346edd))
+
 ## [1.5.1](https://github.com/f6ra07nk14/structcast/compare/v1.5.0...v1.5.1) (2026-03-11)
 
 
