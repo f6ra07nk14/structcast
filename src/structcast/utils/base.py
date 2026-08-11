@@ -526,6 +526,9 @@ def load_yaml_from_stream(stream: Union[str, IO], *, instance: Optional[YAML] = 
 def dump_yaml(data: Any, stream: Union[PathLike, IO], *, instance: Optional[YAML] = None) -> None:
     """Dump data to a yaml file.
 
+    An existing file is located like load_yaml locates it (searching registered directories for relative
+    paths) and overwritten; a path that does not exist yet is created as given.
+
     Args:
         data (Any): The data to dump.
         stream (Path | IO): The file path or file-like object to dump the yaml to.
@@ -544,7 +547,10 @@ def dump_yaml(data: Any, stream: Union[PathLike, IO], *, instance: Optional[YAML
 
     inst = _yaml_manager.load_representer(instance, _find(data))
     if isinstance(stream, (Path, str)):
-        stream = find_path(stream)
+        try:
+            stream = find_path(stream)
+        except FileNotFoundError:
+            pass  # new file: write where the caller said
         with open(stream, "w", encoding="utf-8") as fout:
             inst.instance.dump(data, fout)
     else:

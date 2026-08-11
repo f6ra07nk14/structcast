@@ -326,8 +326,6 @@ class TestDumpYaml:
         data = {"key": "value", "list": ["item1", "item2"]}
         test_file = Path(f"test_dump_temp_{uuid.uuid4()}.yml")
         try:
-            # Create the file first so security check can resolve it
-            test_file.touch()
             dump_yaml(data, test_file)
             result = load_yaml(test_file)
             assert result == data
@@ -340,10 +338,23 @@ class TestDumpYaml:
         yaml_file = tmp_path / "output.yaml"
         data = {"key": "value", "number": 42, "list": [1, 2, 3]}
         with temporary_registered_dir(tmp_path):
-            # Create file first
-            yaml_file.touch()
             dump_yaml(data, yaml_file)
             assert load_yaml(yaml_file) == data
+
+    def test_dump_yaml_creates_new_file(self, tmp_path: Path) -> None:
+        """Test dumping to a path that does not exist yet creates the file instead of raising."""
+        yaml_file = tmp_path / "new_output.yaml"
+        data = {"key": "value"}
+        dump_yaml(data, yaml_file)
+        assert load_yaml(yaml_file) == data
+
+    def test_dump_yaml_overwrites_existing_file_found_in_registered_dir(self, tmp_path: Path) -> None:
+        """Test a relative path targeting an existing file keeps resolving through registered directories."""
+        yaml_file = tmp_path / "existing.yaml"
+        yaml_file.write_text("old: data\n")
+        with temporary_registered_dir(tmp_path):
+            dump_yaml({"new": "data"}, "existing.yaml")
+        assert load_yaml(yaml_file) == {"new": "data"}
 
     def test_dump_yaml_to_stream(self) -> None:
         """Test dumping YAML to a stream."""
@@ -358,8 +369,6 @@ class TestDumpYaml:
         yaml_file = tmp_path / "nested.yaml"
         data = {"nested": {"deep": {"value": 123}}, "list_of_dicts": [{"a": 1}, {"b": 2}]}
         with temporary_registered_dir(tmp_path):
-            # Create file first
-            yaml_file.touch()
             dump_yaml(data, yaml_file)
             assert load_yaml(yaml_file) == data
 
@@ -377,8 +386,6 @@ class TestDumpYaml:
             "datetime": datetime(2024, 1, 1, 12, 0, 0),
         }
         with temporary_registered_dir(tmp_path):
-            # Create file first
-            yaml_file.touch()
             dump_yaml(data, yaml_file)
             loaded = load_yaml(yaml_file)
             # Basic types should match
@@ -572,7 +579,6 @@ class TestYamlAddressConstructor:
     def test_round_trip_uses_from_yaml_without_configuration(self, tmp_path: Path) -> None:
         """Test a dumped object is reconstructed from its address tag with zero configuration."""
         yaml_file = tmp_path / "round_trip.yaml"
-        yaml_file.touch()  # dump_yaml resolves the target path, so it has to exist first
         dump_yaml({"obj": YAMLTestClass(name="test_name", value=42)}, yaml_file)
         result = load_yaml(yaml_file)
         assert isinstance(result["obj"], YAMLTestClass)
