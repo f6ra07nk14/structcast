@@ -41,8 +41,8 @@ execute code in the host process. Consequently:
 - `check_path()` is renamed `find_path()`: it resolves a path and searches registered directories, and no longer
   raises `SecurityError`.
 - `!<address>` YAML tags resolve on demand through a multi-constructor, with no registration step. The registration
-  lives on a private `SafeConstructor` subclass so it does not leak into other `YAML(typ="safe")` instances in the
-  process.
+  is written onto each constructor instance (shadowing ruamel's class-level registry) so it does not leak into other
+  `YAML(typ="safe")` instances in the process, ruamel's `add_multi_constructor` being a classmethod.
 - The documentation says all of this in plain words instead of advertising a sandbox.
 
 ## Alternatives considered

@@ -1,6 +1,5 @@
 """Tests for base utility functions."""
 
-import collections
 from concurrent.futures import Future
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -19,6 +18,7 @@ from ruamel.yaml.constructor import ConstructorError
 import structcast.utils.base as base_module
 from structcast.utils.base import (
     SecurityError,
+    SecuritySettings,
     check_elements,
     configure_security,
     dump_yaml,
@@ -477,7 +477,7 @@ class TestPathResolutionErrors:
     def test_resolve_path_with_oserror(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """Test _resolve_path handles OSError gracefully."""
+        """Test resolve_path handles OSError gracefully."""
         test_path = tmp_path / "test"
         test_path.mkdir()
 
@@ -491,7 +491,7 @@ class TestPathResolutionErrors:
     def test_resolve_path_with_runtime_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """Test _resolve_path handles RuntimeError gracefully."""
+        """Test resolve_path handles RuntimeError gracefully."""
         test_path = tmp_path / "test"
         test_path.mkdir()
 
@@ -504,8 +504,8 @@ class TestPathResolutionErrors:
         assert "Failed to resolve path" in caplog.text
 
 
-def test_configure_security_with_settings_object() -> None:
-    """Test configure_security with SecuritySettings object."""
+def test_configure_security_with_keyword_arguments() -> None:
+    """Test configure_security applies individual keyword arguments to the global settings."""
     configure_security(
         dangerous_dunders={"__custom_dunder__"},
         ascii_check=False,
@@ -516,6 +516,18 @@ def test_configure_security_with_settings_object() -> None:
     assert res.dangerous_dunders == {"__custom_dunder__"}
     assert not res.ascii_check
     assert not res.protected_member_check
+    assert not res.private_member_check
+    configure_security()
+
+
+def test_configure_security_with_settings_object() -> None:
+    """Test configure_security applies a whole SecuritySettings object, the other way to configure globally."""
+    settings = SecuritySettings(dangerous_dunders={"__other_dunder__"}, private_member_check=False)
+    configure_security(settings)
+    res = get_security_settings()
+    assert res.dangerous_dunders == {"__other_dunder__"}
+    assert res.ascii_check
+    assert res.protected_member_check
     assert not res.private_member_check
     configure_security()
 
@@ -531,7 +543,7 @@ def test_yaml_manager_load_representer_with_string_address() -> None:
 
 
 class TestValidateAttributeEdgeCases:
-    """Test _validate_attribute internal function edge cases."""
+    """Test validate_attribute edge cases."""
 
     def test_validate_attribute_with_non_identifier_after_strip(self) -> None:
         """Test attribute that looks valid but isn't an identifier."""
@@ -581,9 +593,17 @@ class TestYamlAddressConstructor:
 
     def test_registration_does_not_leak_into_foreign_yaml_instances(self) -> None:
         """Test address resolution stays inside structcast, since ruamel registers multi-constructors per class."""
-        load_yaml_from_stream("obj: 1\n")  # ensure the constructor has been registered
+        load_yaml_from_stream("obj: 1\n")  # default instance: registers on structcast's own loader
+        load_yaml_from_stream("obj: 2\n", instance=YAML(typ="safe", pure=True))  # caller-provided instance
         with pytest.raises(ConstructorError):
             YAML(typ="safe", pure=True).load("obj: !os.system {}\n")
+
+    def test_caller_provided_instance_resolves_address_tags(self) -> None:
+        """Test a caller-provided instance gains address resolution without polluting the constructor class."""
+        instance = YAML(typ="safe", pure=True)
+        stream = "obj: !tests.utils.test_base.YAMLDumpDefaultTagClass {value: v}\n"
+        result = load_yaml_from_stream(stream, instance=instance)
+        assert result["obj"] == YAMLDumpDefaultTagClass("v")
 
 
 class TestImportTargetValidation:
@@ -605,11 +625,11 @@ class TestImportTargetValidation:
     def test_protected_target_is_blocked_by_default(self) -> None:
         """Test the target is an attribute access, so protected members stay blocked unless opted out."""
         with pytest.raises(SecurityError, match="Protected member"):
-            import_from_address("collections._count_elements")
-        target = import_from_address("collections._count_elements", protected_member_check=False)
-        assert target is collections._count_elements
+            import_from_address("os._exit")
+        target = import_from_address("os._exit", protected_member_check=False)
+        assert target is os._exit
 
     def test_protected_target_follows_global_settings(self) -> None:
         """Test target validation honours the globally configured checks, not just the keyword arguments."""
         with configure_security_context(protected_member_check=False):
-            assert import_from_address("collections._count_elements") is collections._count_elements
+            assert import_from_address("os._exit") is os._exit

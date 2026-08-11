@@ -14,7 +14,6 @@ from types import ModuleType
 from typing import IO, TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union, cast, overload
 
 from ruamel.yaml import YAML
-from ruamel.yaml.constructor import SafeConstructor
 
 from structcast.utils.dataclasses import dataclass
 from structcast.utils.lazy_import import get_default_dir
@@ -89,32 +88,16 @@ def _construct_from_address(constructor: Any, tag_suffix: str, node: Any) -> Any
     return cls_from_yaml(constructor, node)
 
 
-class _AddressConstructor(SafeConstructor):
-    """Safe constructor owning the "!<address>" registration.
-
-    ``add_multi_constructor`` is a classmethod, so registering on ``SafeConstructor`` itself would make every
-    ``YAML(typ="safe")`` instance in the process resolve ``!<address>`` tags through structcast. Owning a
-    subclass keeps the registration inside structcast.
-    """
-
-
-def _new_yaml() -> YAML:
-    """Create the safe YAML instance structcast loads and dumps with."""
-    instance = YAML(typ="safe", pure=True)  # YAML 1.2 support
-    instance.Constructor = _AddressConstructor
-    return instance
-
-
 @dataclass
 class _YamlManager:
     """Manager for YAML constructor and representer reloading."""
 
-    instance: YAML = field(default_factory=_new_yaml)
+    instance: YAML = field(default_factory=lambda: YAML(typ="safe", pure=True))  # YAML 1.2 support
     """YAML loader instance."""
 
     def reset(self) -> None:
         """Reset the YAML instance to default safe settings."""
-        self.instance = _new_yaml()
+        self.instance = YAML(typ="safe", pure=True)
 
     def add_representer(self, tag: str, cls: type, to_yaml_fn: Optional[Callable[[Any, Any], Any]]) -> None:
         """Add a YAML representer for a class."""
@@ -144,7 +127,13 @@ class _YamlManager:
     def load_constructor(self, instance: Optional[YAML]) -> "_YamlManager":
         """Register the constructor resolving "!<address>" tags on demand."""
         self_ = self if instance is None else _YamlManager(instance=instance)
-        self_.instance.constructor.add_multi_constructor("!", _construct_from_address)
+        constructor = self_.instance.constructor
+        if "yaml_multi_constructors" not in vars(constructor):
+            # ruamel's add_multi_constructor is a classmethod, so it would register on the constructor's class
+            # (usually SafeConstructor itself) and make every YAML(typ="safe") instance in the process resolve
+            # "!<address>" tags through structcast. Shadow the class registry with a per-instance copy instead.
+            constructor.yaml_multi_constructors = dict(constructor.yaml_multi_constructors)
+        constructor.yaml_multi_constructors["!"] = _construct_from_address
         return self_
 
 
@@ -369,10 +358,10 @@ def validate_attribute(
 
 
 def find_path(path: PathLike) -> Path:
-    """Check if a path exists, searching in registered directories if necessary.
+    """Find an existing path, searching in registered directories if necessary.
 
     Args:
-        path (PathLike): The path to check.
+        path (PathLike): The path to find.
 
     Returns:
         Path: The resolved path.
@@ -478,18 +467,21 @@ def import_from_address(
     if module_file is not None:
         module_file = find_path(module_file)
         module_name = module_name or module_file.stem
-        module = __load_module(module_name, module_file)
+    if module_name is not None:
+        # Validate before importing: importing a module executes its top-level code.
+        for part in module_name.split("."):
+            if not part.isidentifier():
+                raise SecurityError(f"Invalid module path: {repr(module_name)}")
+            if part in _security_settings.dangerous_dunders:
+                raise SecurityError(f"Dangerous dunder in module path: {repr(part)}")
+    if module_file is not None:
+        module = __load_module(cast(str, module_name), module_file)
     elif module_name is not None:
         module = import_module(module_name)
     elif default_module is None:
         module, module_name = import_module("builtins"), "builtins"
     else:
         module, module_name = default_module, default_module.__name__
-    for part in module_name.split("."):
-        if not part.isidentifier():
-            raise SecurityError(f"Invalid module path: {repr(module_name)}")
-        if part in _security_settings.dangerous_dunders:
-            raise SecurityError(f"Dangerous dunder in module path: {repr(part)}")
     _validate_attribute(
         target,
         protected_member_check=protected_member_check,
