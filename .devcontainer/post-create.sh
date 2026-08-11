@@ -141,6 +141,7 @@ if ! command -v claude >/dev/null 2>&1; then
   echo "Claude CLI not found. Skipping Claude plugin setup."
 else
   CLAUDE_PLUGINS="$(claude plugin list 2>/dev/null || true)"
+  claude plugin marketplace add DietrichGebert/ponytail && claude plugin install ponytail@ponytail
 fi
 
 echo "Devcontainer post-create setup complete."
