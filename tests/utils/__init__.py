@@ -5,17 +5,24 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
-from structcast.utils.security import configure_security, register_dir, unregister_dir
+from structcast.utils.base import configure_security, register_dir, unregister_dir
 
 
 @contextmanager
 def configure_security_context(
-    blocked_modules: Optional[set[str]] = None,
-    allowed_modules: Optional[dict[str, Optional[set[Optional[str]]]]] = None,
+    dangerous_dunders: Optional[set[str]] = None,
+    ascii_check: Optional[bool] = None,
+    protected_member_check: Optional[bool] = None,
+    private_member_check: Optional[bool] = None,
 ) -> Generator[None, None, None]:
     """Context manager to temporarily configure security settings."""
     try:
-        configure_security(allowed_modules=allowed_modules, blocked_modules=blocked_modules)
+        configure_security(
+            dangerous_dunders=dangerous_dunders,
+            ascii_check=ascii_check,
+            protected_member_check=protected_member_check,
+            private_member_check=private_member_check,
+        )
         yield
     finally:
         configure_security()

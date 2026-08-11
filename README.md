@@ -1,8 +1,8 @@
 # StructCast
 
-**Declarative data orchestration — from configuration to live objects, safely.**
+**Declarative data orchestration — from configuration to live objects.**
 
-StructCast is a Python library that bridges the gap between static configuration and runtime behavior. Define your data pipelines, object construction, and dynamic templates in plain YAML or JSON, and let StructCast turn them into live Python objects — with security built in from the ground up.
+StructCast is a Python library that bridges the gap between static configuration and runtime behavior. Define your data pipelines, object construction, and dynamic templates in plain YAML or JSON, and let StructCast turn them into live Python objects.
 
 ---
 
@@ -16,7 +16,7 @@ StructCast was designed to solve three recurring challenges:
 2. **Nested data extraction and restructuring** — Navigate complex data hierarchies with concise dot-notation paths and reshape results into the exact structure your application expects.
 3. **Dynamic configuration generation** — Embed Jinja2 templates directly inside data structures, enabling conditional logic, loops, and runtime variable injection while keeping everything serializable and auditable.
 
-All of this runs through a **sandboxed security layer** that validates imports, blocks dangerous attributes, and prevents code injection — so configurations can be safely loaded from external sources.
+One thing to be clear about up front: **configuration is trusted input**. A configuration can name any importable Python object, so handing StructCast a configuration file is equivalent to letting it execute code. See [Security](#security).
 
 ---
 
@@ -65,8 +65,8 @@ All of this runs through a **sandboxed security layer** that validates imports, 
 | **Custom resolvers**            | Register domain-specific spec resolvers for extensible data extraction                          |
 | **Jinja2 templating**           | Embed Jinja templates in data structures with YAML/JSON auto-parsing                            |
 | **Sandboxed execution**         | All templates run in `ImmutableSandboxedEnvironment` by default                                 |
-| **Security layer**              | Module blocklist/allowlist, attribute validation, path traversal protection                     |
-| **YAML-native**                 | First-class YAML loading/dumping via `ruamel.yaml` with security checks                         |
+| **Attribute guards**            | Dunder, private/protected and non-ASCII attribute access blocked by default                     |
+| **YAML-native**                 | First-class YAML loading/dumping via `ruamel.yaml` in safe mode                                 |
 | **Pydantic integration**        | Patterns and specs are validated as Pydantic models at parse time                               |
 | **Serializable**                | Every pattern is a plain dict/list — store in YAML, JSON, or databases                          |
 
@@ -306,7 +306,7 @@ assert result == 30
 - Return a new `PatternResult` with updated `patterns` and `runs` lists
 - Register with `register_pattern(YourPattern)` before use
 
-Custom patterns integrate seamlessly with built-in patterns and can be composed in any `_obj_` chain. They're validated at instantiation time and benefit from all security constraints (recursion limits, timeouts, import validation).
+Custom patterns integrate seamlessly with built-in patterns and can be composed in any `_obj_` chain. They're validated at instantiation time and benefit from the same constraints (recursion limits, timeouts, attribute validation).
 
 ### Specifier
 
@@ -479,23 +479,28 @@ Both patterns can coexist in a single config tree and are resolved recursively. 
 
 ### Security
 
-StructCast includes a comprehensive security layer that guards all dynamic operations. Since configurations may be loaded from external or untrusted sources, every import, attribute access, and file path is validated before execution:
+**Configuration is trusted input. Loading a configuration from an untrusted source is equivalent to executing untrusted code.**
 
-- **Module blocklist** — blocks dangerous modules (`os`, `subprocess`, `sys`, `pickle`, `socket`, and more)
-- **Module allowlist** — only permits known-safe builtins and standard library modules
-- **Attribute validation** — blocks dangerous dunder methods (`__subclasses__`, `__globals__`, `__code__`, and more)
-- **Protected/private member checks** — optionally block `_protected` and `__private` members
-- **Path security** — prevents hidden directory access and path traversal attacks
-- **Recursion limits** — maximum depth (100) and timeout (30s) for all recursive operations
+An `_addr_` pattern is an import instruction, and StructCast performs it. `import_from_address("os.system")` returns `os.system`, and `{"_obj_": [{"_addr_": "os.system"}, {"_call_": ["…"]}]}` runs it. A YAML `!<address>` tag imports the address the same way, which executes that module's top-level code. There is no module allowlist or blocklist, and there is no sandbox around imports. Treat a configuration file exactly as you would treat a `.py` file in your repository: it must come from somewhere you already trust to run code.
+
+Concretely, do **not** pass a config that arrived over the network, from a file upload, or from a multi-tenant user to `instantiate()`, `load_yaml()`, or `FlexSpec`. If you need that, validate the config against a schema of your own and resolve the addresses yourself.
+
+What StructCast still enforces, and what each guard is actually for:
+
+- **Attribute validation** — `_attr_` paths and the target half of an address are checked before access: dangerous dunders (`__subclasses__`, `__globals__`, `__code__`, and more) are always blocked, and non-ASCII, `_protected` and `__private` names are blocked by default. This limits accidental traversal into object internals; it is not a barrier against a config author who can already name any module.
+- **YAML safe loader** — YAML is parsed with `ruamel.yaml` in `typ="safe"` mode, so a YAML document cannot construct arbitrary Python objects through standard `!!python/…` tags. StructCast's own `!<address>` tags are the intended escape hatch and are resolved by importing the address.
+- **Sandboxed templates** — Jinja2 rendering runs in `ImmutableSandboxedEnvironment`, so a template cannot mutate the objects it is given or reach into their internals.
+- **Module files are `.py` only** — `_file_` / `module_file` loading refuses any suffix other than `.py`.
+- **Recursion limits** — maximum depth (100) and timeout (30s) for all recursive operations, which bounds a malformed or cyclic config.
 
 ```python
-from structcast.utils.security import configure_security
+from structcast.utils.base import configure_security
 
-# Tighten security settings
+# Attribute-access guards; these do not restrict which modules can be imported.
 configure_security(
     ascii_check=True,
     protected_member_check=True,
-    hidden_check=True,
+    private_member_check=True,
 )
 ```
 
@@ -503,13 +508,14 @@ configure_security(
 
 The `utils.base` module provides helper functions used throughout the library and available for direct use in application code:
 
-| Function                    | Purpose                         |
-| --------------------------- | ------------------------------- |
-| `import_from_address(addr)` | Security-checked dynamic import |
-| `load_yaml(path)`           | Load YAML with path validation  |
-| `load_yaml_from_string(s)`  | Parse YAML from a string        |
-| `dump_yaml(data, path)`     | Write YAML with path validation |
-| `dump_yaml_to_string(data)` | Serialize data to YAML string   |
+| Function                    | Purpose                                          |
+| --------------------------- | ------------------------------------------------ |
+| `import_from_address(addr)` | Dynamic import from an address                   |
+| `find_path(path)`           | Resolve a path, searching registered directories |
+| `load_yaml(path)`           | Load YAML with the safe loader                   |
+| `load_yaml_from_string(s)`  | Parse YAML from a string                         |
+| `dump_yaml(data, path)`     | Write YAML to a file                             |
+| `dump_yaml_to_string(data)` | Serialize data to YAML string                    |
 
 ---
 
@@ -675,7 +681,7 @@ StructCast shares design philosophies with both [Hydra](https://hydra.cc/) (by F
 - Both use **YAML-based hierarchical configuration** as a primary data format
 - Both support **dynamic object instantiation** from config — Hydra uses `_target_` to reference classes; StructCast uses `_addr_` + `_call_` patterns
 - Both enable **runtime overrides** and composable configuration
-- Both provide validation and safety mechanisms for configuration data
+- Both treat configuration as trusted input — a config can name any importable Python object
 
 **Differences:**
 
@@ -688,13 +694,13 @@ StructCast shares design philosophies with both [Hydra](https://hydra.cc/) (by F
 | **Variable interpolation** | Built-in OmegaConf resolvers (`${db.host}`)                       | Jinja2 templates (`{{ db.host }}`) with full logic support                  |
 | **Data access**            | Dot-notation on OmegaConf containers                              | Specifier module with custom resolvers and accessors                        |
 | **Templating**             | Not built-in (static interpolation only)                          | Full Jinja2 with conditionals, loops, YAML/JSON auto-parsing                |
-| **Security**               | No built-in security layer                                        | Comprehensive: module blocklist/allowlist, attribute filtering, path checks |
+| **Trust model**            | Config is trusted input (`_target_` imports anything)             | Same: config is trusted input (`_addr_` imports anything)                   |
 | **CLI integration**        | First-class CLI with overrides and tab completion                 | Not included (library-only)                                                 |
 | **Multi-run / sweeps**     | Built-in parameter sweep support                                  | Not included                                                                |
 
 **When to choose Hydra:** You need a full application framework with CLI argument parsing, experiment sweeps, and output directory management.
 
-**When to choose StructCast:** You need a composable library for building objects from config, accessing nested data, and generating dynamic configurations with security constraints — without framework lock-in.
+**When to choose StructCast:** You need a composable library for building objects from config, accessing nested data, and generating dynamic configurations — without framework lock-in.
 
 ### StructCast vs glom
 
@@ -716,13 +722,13 @@ StructCast shares design philosophies with both [Hydra](https://hydra.cc/) (by F
 | **Serializability** | Specs are Python objects (not easily serializable)                   | All patterns are plain dicts/lists (YAML/JSON serializable)                              |
 | **Fallback values** | `Coalesce` and `default` parameter                                   | Resolver-based (`constant:`, `skip:`)                                                    |
 | **Type validation** | `Check` spec                                                         | Pydantic model validation on patterns                                                    |
-| **Security**        | Not included                                                         | Built-in module/attribute/path security                                                  |
+| **Trust model**     | Specs are Python code, so trusted by construction                    | Specs are data, but still trusted input (`_addr_` imports anything)                      |
 | **Streaming**       | Built-in streaming iteration support                                 | Not included                                                                             |
 | **Mutation**        | `Assign`, `Delete` for in-place mutation                             | Not included (functional approach)                                                       |
 
 **When to choose glom:** You need a rich, in-process data query/transformation library with streaming, mutation, and advanced pattern matching.
 
-**When to choose StructCast:** You need serializable configuration-driven workflows that combine object instantiation, data access, and template rendering with security guarantees.
+**When to choose StructCast:** You need serializable configuration-driven workflows that combine object instantiation, data access, and template rendering, and you control where the configuration comes from.
 
 ### Summary Table
 
@@ -733,7 +739,7 @@ StructCast shares design philosophies with both [Hydra](https://hydra.cc/) (by F
 | Partial application  | `_bind_` pattern               | `_partial_: true`   | `Invoke` + `partial`      |
 | Templating           | Jinja2 (sandboxed)             | None                | None                      |
 | Serializable config  | Yes (plain dict/list)          | Yes (YAML)          | No (Python objects)       |
-| Security layer       | Yes (blocklist/allowlist/path) | No                  | No                        |
+| Config is trusted    | Yes (imports any address)      | Yes (`_target_`)    | N/A (specs are code)      |
 | CLI framework        | No                             | Yes                 | No                        |
 | Parameter sweeps     | No                             | Yes (multi-run)     | No                        |
 | Data streaming       | No                             | No                  | Yes                       |
@@ -750,7 +756,7 @@ Full runnable examples are in the [`examples/`](examples/) directory. They are o
 | [01_basic_instantiation.py](examples/01_basic_instantiation.py)       | Pattern-based object construction: `_addr_`, `_call_`, `_attr_`, `_bind_`, `_obj_` |
 | [02_specifier_access.py](examples/02_specifier_access.py)             | Dot-notation data access, constant resolver, data restructuring                    |
 | [03_template_rendering.py](examples/03_template_rendering.py)         | Jinja2 templates, YAML/JSON output, structured extension, template groups          |
-| [04_security_configuration.py](examples/04_security_configuration.py) | Import validation, attribute checking, custom security settings                    |
+| [04_security_configuration.py](examples/04_security_configuration.py) | Trusted-input model, attribute validation, custom security settings                |
 | [05_yaml_workflow.py](examples/05_yaml_workflow.py)                   | End-to-end YAML config workflow combining all modules                              |
 
 Run any example directly:

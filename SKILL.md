@@ -1,6 +1,6 @@
 ---
 name: structcast
-description: StructCast converts YAML/JSON configuration into live Python objects with three core capabilities - (1) pattern-based instantiation that builds objects from dict/list patterns without writing factory code, (2) dot-notation data access and reshaping for navigating nested structures, and (3) Jinja2 template rendering embedded in data structures for dynamic config generation. Use this when working with config-driven pipelines, object instantiation patterns (_obj_, _addr_, _call_, _bind_, _attr_), specifier-based data extraction (FlexSpec, RawSpec, convert_spec, construct), or template expansion (_jinja_, _jinja_yaml_, _jinja_json_). All operations run through a mandatory security layer with module allowlists/blocklists.
+description: StructCast converts YAML/JSON configuration into live Python objects with three core capabilities - (1) pattern-based instantiation that builds objects from dict/list patterns without writing factory code, (2) dot-notation data access and reshaping for navigating nested structures, and (3) Jinja2 template rendering embedded in data structures for dynamic config generation. Use this when working with config-driven pipelines, object instantiation patterns (_obj_, _addr_, _call_, _bind_, _attr_), specifier-based data extraction (FlexSpec, RawSpec, convert_spec, construct), or template expansion (_jinja_, _jinja_yaml_, _jinja_json_). Configuration is trusted input - an address in a config is imported as written, so loading a config from an untrusted source is equivalent to executing untrusted code.
 ---
 
 # StructCast
@@ -12,7 +12,7 @@ Capability reference for each module, with entry points and key APIs.
 **Instantiation**: `instantiate({"_obj_": [{"_addr_": "module.Class"}]})` 
 **Data Access**: `construct(data, convert_spec({"key": "path.to.data"}))` 
 **Templates**: `extend_structure(config, template_kwargs={...})` 
-**Security**: `configure_security(allowed_modules={...})`
+**Security**: `configure_security(protected_member_check=False)` — attribute guards only; config is trusted input
 
 ## Common Workflows
 
@@ -100,7 +100,7 @@ Handle typed exceptions from each module:
 | `SpecError` | `specifier.py` | Invalid spec syntax, access failures, resolver errors |
 | `InstantiationError` | `instantiator.py` | Pattern validation errors, recursion/timeout limits |
 | `StructuredExtensionError` | `template.py` | Template rendering failures, invalid extension operations |
-| `SecurityError` | `utils/security.py` | Blocked imports, dangerous attributes, path violations |
+| `SecurityError` | `utils/base.py` | Dangerous dunders, non-ASCII/private/protected attribute access, non-`.py` module file |
 
 ## Object Instantiation
 
@@ -146,9 +146,9 @@ register_pattern(MultiplyPattern)  # Register globally
 instantiate({"_obj_": [{"_addr_": "int"}, {"_call_": ["10"]}, {"_multiply_": 3}]})  # → 30
 ```
 
-**Requirements**: Inherit `BasePattern`, use `Field(alias=...)`, implement `build()`, call `validate_pattern_result()`, return new `PatternResult` with updated `patterns` and `runs` lists. All security constraints (recursion, timeout) apply automatically.
+**Requirements**: Inherit `BasePattern`, use `Field(alias=...)`, implement `build()`, call `validate_pattern_result()`, return new `PatternResult` with updated `patterns` and `runs` lists. Recursion and timeout limits apply automatically.
 
-**Constraints**: Max recursion depth 100, max time 30s. All imports validated by security layer.
+**Constraints**: Max recursion depth 100, max time 30s. Addresses are imported as written; only the attribute half is validated.
 
 ## Data Access & Reshaping
 
@@ -235,48 +235,41 @@ Embed Jinja2 templates inside data structures for dynamic configuration generati
 
 ## Security Enforcement
 
-**Module**: `structcast.utils.security`
+**Module**: `structcast.utils.base`
 
-Validate all dynamic imports, attribute access, and file paths.
+**Trust model**: configuration is trusted input. `import_from_address("os.system")` succeeds, and a YAML `!subprocess.Popen` tag is resolved by importing that address. There is no module allowlist or blocklist. Never load a configuration that came from an untrusted source.
+
+What is still enforced: attribute-access validation (the `_attr_` path and the target half of an address), the `ruamel.yaml` safe loader, the Jinja sandbox, and module files having to be `.py`.
 
 | Capability | Entry Point | Example |
 | -- | -- | -- |
-| Configure security | `configure_security(blocked_modules=..., allowed_modules=...)` | Global settings |
-| Block modules | `DEFAULT_BLOCKED_MODULES` | `os`, `subprocess`, `pickle`, etc. |
-| Allow modules | `DEFAULT_ALLOWED_MODULES` | `builtins.int`, `math.sqrt`, etc. |
+| Configure security | `configure_security(ascii_check=..., protected_member_check=...)` | Global settings |
 | Block dunders | `DEFAULT_DANGEROUS_DUNDERS` | `__subclasses__`, `__globals__`, etc. |
-| Validate import | `validate_import(module_name, target)` | Checks blocklist + allowlist |
 | Validate attribute | `validate_attribute("obj.method")` | Checks dunders + protected/private |
-| Check file path | `check_path(path)` | Hidden dir + working dir checks |
-| Register import dir | `register_dir(path)` / `unregister_dir(path)` | Extend allowed file search paths |
+| Read current settings | `get_security_settings()` | Returns a copy of `SecuritySettings` |
+| Resolve a file path | `find_path(path)` | Searches registered directories |
+| Register import dir | `register_dir(path)` / `unregister_dir(path)` | Extend relative file search paths |
 
 **Key classes**: `SecuritySettings`, `SecurityError`
 
-**SecuritySettings Fields**:
+**SecuritySettings Fields** (all gate attribute access, not imports):
 
-- `blocked_modules: set[str]` — Module names to block (default: `DEFAULT_BLOCKED_MODULES`)
-- `allowed_modules: dict[str, Optional[set[Optional[str]]]]` — Allowlist with specific members
-  - `None` value → disable allowlist for that module
-  - `set` value → only listed members allowed
-  - `None` in set → all members allowed
 - `dangerous_dunders: set[str]` — Blocked dunder attributes (default: `DEFAULT_DANGEROUS_DUNDERS`)
 - `ascii_check: bool` — Block non-ASCII attribute names (default: `True`)
 - `protected_member_check: bool` — Block `_protected` members (default: `True`)
 - `private_member_check: bool` — Block `__private` members (default: `True`)
-- `hidden_check: bool` — Block paths with hidden directories (default: `True`)
-- `working_dir_check: bool` — Enforce working directory containment (default: `True`)
 
 ## YAML Operations
 
-**Module**: `structcast.utils.base` (delegates to `security.py`)
+**Module**: `structcast.utils.base`
 
 | Capability | Entry Point |
 | -- | -- |
-| Load YAML file | `load_yaml(path)` — path-validated, uses `ruamel.yaml` |
-| Load YAML string | `load_yaml_from_string(yaml_str)` — safe YAML parsing |
-| Dump to YAML file | `dump_yaml(data, path)` — path-validated, preserves formatting |
+| Load YAML file | `load_yaml(path)` — resolves the path, uses `ruamel.yaml` safe loader |
+| Load YAML string | `load_yaml_from_string(yaml_str)` — safe loader; `!<address>` tags import on demand |
+| Dump to YAML file | `dump_yaml(data, path)` — preserves formatting |
 | Dump to YAML string | `dump_yaml_to_string(data)` — serialize to YAML string |
-| Security-checked import | `import_from_address(addr)` — validates then imports module/attr |
+| Import from address | `import_from_address(addr)` — imports the module, validates the target attribute |
 | Normalize to list | `check_elements(value)` — `None`→`[]`, scalar→`[scalar]`, seq→`list` |
 | Unroll call arguments | `unroll_call(args, kwargs)` — normalize to `(*args, **kwargs)` tuple |
 
@@ -308,9 +301,9 @@ See `examples/06_sensor_dashboard.py`, `examples/07_validation_pipeline.py`, `ex
 
 ### Common Errors
 
-**`SecurityError: Module 'X' is blocked`**
-- **Cause**: Importing from a blocked module (e.g., `os`, `subprocess`)
-- **Solution**: Either use an allowed alternative or configure security with `configure_security(blocked_modules=...)`
+**`SecurityError: Protected member access attempt: '_x'`**
+- **Cause**: An address target or `_attr_` path names a `_protected`, `__private`, non-ASCII or dangerous-dunder attribute
+- **Solution**: Use the public name, or relax the guard with `configure_security(protected_member_check=False)`
 
 **`InstantiationError: Maximum recursion depth exceeded`**
 - **Cause**: Circular references or deeply nested patterns (depth > 100)

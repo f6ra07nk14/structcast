@@ -25,9 +25,8 @@ from typing_extensions import Self
 from structcast.core.base import Serializable
 from structcast.core.constants import MAX_RECURSION_DEPTH, MAX_RECURSION_TIME
 from structcast.core.exceptions import InstantiationError, SpecError
-from structcast.utils.base import import_from_address, unroll_call
+from structcast.utils.base import import_from_address, split_attribute, unroll_call, validate_attribute
 from structcast.utils.dataclasses import dataclass
-from structcast.utils.security import split_attribute, validate_attribute
 
 logger = getLogger(__name__)
 

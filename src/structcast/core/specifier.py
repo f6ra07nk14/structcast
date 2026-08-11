@@ -26,15 +26,16 @@ from structcast.core.base import Serializable
 from structcast.core.constants import SPEC_FORMAT, SPEC_SOURCE
 from structcast.core.exceptions import SpecError
 from structcast.core.instantiator import ObjectPattern
-from structcast.utils.base import check_elements, unroll_call
-from structcast.utils.dataclasses import dataclass
-from structcast.utils.security import (
+from structcast.utils.base import (
     SecurityError,
+    check_elements,
     convert_part_to_string,
     convert_parts_to_string,
     split_attribute,
+    unroll_call,
     validate_attribute,
 )
+from structcast.utils.dataclasses import dataclass
 
 logger = getLogger(__name__)
 

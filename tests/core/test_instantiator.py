@@ -24,8 +24,8 @@ from structcast.core.instantiator import (
     register_pattern,
     validate_pattern_result,
 )
-from structcast.utils.security import SecurityError
-from tests.utils import configure_security_context, temporary_registered_dir
+from structcast.utils.base import SecurityError
+from tests.utils import temporary_registered_dir
 
 # ============================================================================
 # Test 1: Basic Pattern Schema and Validation
@@ -150,7 +150,7 @@ class TestPatternBuild:
         test_file = tmp_path / "mymodule.py"
         test_file.write_text("def my_func(): return 42")
         # Need to allow the custom module temporarily
-        with temporary_registered_dir(tmp_path), configure_security_context(allowed_modules={"mymodule": {None}}):
+        with temporary_registered_dir(tmp_path):
             result = AddressPattern.model_validate({"_addr_": "my_func", "_file_": test_file}).build()
             assert len(result.runs) == 1
             assert callable(result.runs[0])
@@ -278,7 +278,7 @@ class TestPatternBuild:
         test_file = tmp_path / "module.py"
         test_file.write_text("value = 42")
 
-        with temporary_registered_dir(tmp_path), configure_security_context(allowed_modules={"module": {None}}):
+        with temporary_registered_dir(tmp_path):
             # Test tuple format ["_addr_", address, file]
             pattern = AddressPattern.model_validate(["_addr_", "module.value", test_file])
             assert pattern.address == "module.value"
@@ -454,51 +454,6 @@ class TestInstantiateFunction:
 class TestSecurityAndInjectionAttacks:
     """Test security features and attempt injection attacks."""
 
-    def test_blocked_os_module(self) -> None:
-        """Test that os module is blocked by allowlist."""
-        with pytest.raises(SecurityError, match="os.system"):
-            instantiate(["_obj_", {"_addr_": "os.system"}])
-
-    def test_blocked_subprocess_module(self) -> None:
-        """Test that subprocess module is blocked."""
-        with pytest.raises(SecurityError, match="subprocess.run"):
-            instantiate(["_obj_", {"_addr_": "subprocess.run"}])
-
-    def test_blocked_eval_builtin(self) -> None:
-        """Test that eval builtin is blocked."""
-        with pytest.raises(SecurityError, match="eval"):
-            instantiate(["_obj_", {"_addr_": "eval"}])
-
-    def test_blocked_exec_builtin(self) -> None:
-        """Test that exec builtin is blocked."""
-        with pytest.raises(SecurityError, match="exec"):
-            instantiate(["_obj_", {"_addr_": "exec"}])
-
-    def test_blocked_compile_builtin(self) -> None:
-        """Test that compile builtin is blocked."""
-        with pytest.raises(SecurityError, match="compile"):
-            instantiate(["_obj_", {"_addr_": "compile"}])
-
-    def test_blocked_open_builtin(self) -> None:
-        """Test that open builtin is blocked."""
-        with pytest.raises(SecurityError, match="open"):
-            instantiate(["_obj_", {"_addr_": "open"}])
-
-    def test_blocked_getattr(self) -> None:
-        """Test that getattr builtin is blocked."""
-        with pytest.raises(SecurityError, match="getattr"):
-            instantiate(["_obj_", {"_addr_": "getattr"}])
-
-    def test_blocked_setattr(self) -> None:
-        """Test that setattr builtin is blocked."""
-        with pytest.raises(SecurityError, match="setattr"):
-            instantiate(["_obj_", {"_addr_": "setattr"}])
-
-    def test_blocked_globals(self) -> None:
-        """Test that globals builtin is blocked."""
-        with pytest.raises(SecurityError, match="globals"):
-            instantiate(["_obj_", {"_addr_": "globals"}])
-
     def test_private_member_access(self) -> None:
         """Test that private members cannot be accessed."""
         # This raises SecurityError during validation, which is caught and wrapped
@@ -523,36 +478,14 @@ class TestSecurityAndInjectionAttacks:
         with pytest.raises(SecurityError, match="__import__"):
             instantiate(["_obj_", {"_addr_": "__import__"}])
 
-    def test_injection_attempt_type_blocked(self) -> None:
-        """Test that type builtin is blocked."""
-        with pytest.raises(SecurityError, match="type"):
-            instantiate(["_obj_", {"_addr_": "type"}])
-
 
 # ============================================================================
-# Test 5: Security Bypass Attempts with configure_security (allowed_modules only)
+# Test 5: Attribute Access Restrictions and Pattern Edge Cases
 # ============================================================================
 
 
-class TestSecurityBypassWithConfigureSecurity:
-    """Test attempts to bypass security using only allowed_modules parameter."""
-
-    @pytest.mark.parametrize("builtin", ["eval", "exec", "compile", "__import__", "getattr", "setattr", "globals"])
-    def test_allowed_modules_does_not_bypass_blocked_builtins(self, builtin: str) -> None:
-        """Verify that allowed_modules cannot bypass blocked_builtins."""
-        # Dangerous builtins still blocked
-        with pytest.raises(SecurityError, match=builtin):
-            instantiate(["_obj_", {"_addr_": builtin}])
-
-    @pytest.mark.parametrize(
-        "addr",
-        ["os.system", "subprocess.run", "sys.exit", "importlib.import_module", "pickle.loads", "marshal.loads"],
-    )
-    def test_allowed_modules_does_not_bypass_blocked_modules(self, addr: str) -> None:
-        """Verify that allowed_modules cannot bypass blocked_modules."""
-        # Dangerous modules should still be blocked
-        with pytest.raises(SecurityError, match=addr):
-            instantiate(["_obj_", {"_addr_": addr}])
+class TestAttributeAccessAndPatternEdgeCases:
+    """Test that attribute access restrictions still apply, plus pattern build edge cases."""
 
     def test_conclusion_security_is_layered(self) -> None:
         """Demonstrate that security is properly layered."""
