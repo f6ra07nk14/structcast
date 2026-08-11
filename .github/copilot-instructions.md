@@ -10,13 +10,12 @@
 StructCast converts serializable config (dicts/lists) into live Python objects through three core modules in `src/structcast/core/`:
 
 - **Instantiator** (`instantiator.py`) — Pattern-based object construction. Patterns use alias keys: `_addr_` (import), `_attr_` (attribute access), `_call_` (invocation), `_bind_` (partial application), composed inside `_obj_` lists. All patterns extend `BasePattern(BaseModel, ABC)` with a `build(result) -> PatternResult` method. Entry point: `instantiate(cfg)`.
-- **Specifier** (`specifier.py`) — Dot-notation path access and data reshaping. Uses `SpecIntermediate` for parsed specs, `FlexSpec`/`RawSpec`/`ObjectSpec` for construction. Extensible via `register_resolver()` and `register_accesser()`. Entry point: `construct(spec, data)`.
+- **Specifier** (`specifier.py`) — Dot-notation path access and data reshaping. Uses `SpecIntermediate` for parsed specs, `FlexSpec`/`RawSpec`/`ObjectSpec` for construction. Extensible via `register_resolver()` and `register_accesser()`. Entry point: `construct(data, spec)`.
 - **Template** (`template.py`) — Jinja2 templates embedded in data structures. `JinjaTemplate`, `JinjaYamlTemplate`, `JinjaJsonTemplate` wrap templates with optional pipe chains. Templates run in `ImmutableSandboxedEnvironment` by default.
 
 Shared utilities live in `src/structcast/utils/`:
 
-- **Security** (`security.py`) — Module blocklist/allowlist, attribute validation, dunder blocking, path traversal protection. Configured via `configure_security()` with `SecuritySettings` dataclass. This is the enforcement layer all imports pass through.
-- **Base** (`base.py`) — `import_from_address()`, `load_yaml()`, `check_elements()` — thin wrappers that delegate to security-checked implementations.
+- **Base** (`base.py`) — `import_from_address()`, `validate_attribute()`, `find_path()`, `load_yaml()`, `check_elements()`, plus `SecuritySettings` / `configure_security()`. Attribute-access validation (dunder, ASCII, protected/private) lives here; there is no import allowlist or blocklist.
 - **Types/Dataclasses** — `PathLike` type alias; custom `@dataclass` wrapper adding `kw_only=True, slots=True` on Python 3.10+.
 
 ## Key Patterns & Conventions
@@ -54,15 +53,14 @@ pytest is configured with `--doctest-modules --cov src/` and runs against both `
 
 - Tests mirror source layout: `tests/core/test_instantiator.py` ↔ `src/structcast/core/instantiator.py`.
 - Use context managers from `tests/utils/__init__.py` to temporarily modify global state:
-  - `configure_security_context(allowed_modules=..., blocked_modules=...)` — resets security after block.
+  - `configure_security_context(protected_member_check=..., ascii_check=...)` — resets security after block.
   - `temporary_registered_dir(path)` — registers/unregisters import directory.
 - Test classes group by concern (e.g., `TestPatternSchemas`, `TestInstantiation`). Use `@pytest.mark.parametrize` for variant coverage.
 - Doctests in source modules are part of the test suite — keep examples in docstrings runnable.
 
 ## Security Model
 
-All imports go through `utils/security.py`. When adding new functionality:
-- Never bypass `import_from_address()` — it enforces blocklist/allowlist.
-- `DEFAULT_BLOCKED_MODULES` in `utils/constants.py` blocks `os`, `subprocess`, `pickle`, `socket`, etc.
-- `DEFAULT_ALLOWED_MODULES` whitelists specific safe members of `builtins`, `collections`, `datetime`, etc.
-- Attribute access is validated against `DEFAULT_DANGEROUS_DUNDERS` and ASCII/protected/private member checks.
+Config is trusted input: an address is imported as written, so supplying a config is equivalent to executing code. There is no module allowlist or blocklist. When adding new functionality:
+- Never bypass `import_from_address()` in `utils/base.py` — it is the single place module paths and attribute targets are validated.
+- Attribute access (the target half of an address and every `_attr_` path) is validated against `DEFAULT_DANGEROUS_DUNDERS` and ASCII/protected/private member checks.
+- Do not reintroduce import allow/block lists; see `docs/adr/0001-trusted-input-security-model.md`.

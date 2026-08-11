@@ -4,7 +4,9 @@
 
 ## What This Project Does
 
-StructCast turns **serializable config** (plain dicts/lists in YAML or JSON) into **live Python objects** through three composable modules — Instantiator, Specifier, and Template — all gated by a **mandatory security layer**. No framework lock-in; everything stays serializable.
+StructCast turns **serializable config** (plain dicts/lists in YAML or JSON) into **live Python objects** through three composable modules — Instantiator, Specifier, and Template. No framework lock-in; everything stays serializable.
+
+**Config is trusted input.** An `_addr_` is imported as written, so handing StructCast a config is equivalent to letting it execute code. Never load config from an untrusted source.
 
 ## Repository Map
 
@@ -17,14 +19,14 @@ src/structcast/
 │   ├── constants.py            # MAX_RECURSION_DEPTH (100), MAX_RECURSION_TIME (30s), SPEC_FORMAT
 │   └── exceptions.py           # SpecError, InstantiationError, StructuredExtensionError
 ├── utils/
-│   ├── security.py             # SecuritySettings, configure_security(), import_from_address() (real impl)
-│   ├── base.py                 # Public thin wrappers: import_from_address, load_yaml, dump_yaml, check_elements
-│   ├── constants.py            # DEFAULT_BLOCKED_MODULES, DEFAULT_ALLOWED_MODULES, DEFAULT_DANGEROUS_DUNDERS
+│   ├── base.py                 # Everything: SecuritySettings, configure_security(), validate_attribute(),
+│   │                           #   import_from_address(), find_path(), load_yaml/dump_yaml, check_elements
+│   ├── lazy_import.py          # DEFAULT_ALLOWED_DUNDERS, lazy module/attribute importers
 │   ├── dataclasses.py          # Custom @dataclass (adds kw_only/slots on 3.10+)
 │   └── types.py                # PathLike type alias
 tests/
 ├── core/test_{instantiator,specifier,template}.py
-├── utils/{test_base,test_security}.py
+├── utils/test_{base,lazy_import}.py
 └── utils/__init__.py           # configure_security_context(), temporary_registered_dir()
 examples/
 ├── 01-05                       # Single-module demos (instantiator, specifier, template, security, yaml)
@@ -35,7 +37,7 @@ examples/
 
 ```text
 YAML config
-  │  load_yaml_from_string()          ← utils/base.py (delegates to security.py)
+  │  load_yaml_from_string()          ← utils/base.py (ruamel.yaml safe loader)
   ▼
 Plain dict/list
   │  extend_structure()               ← template.py: resolves _jinja_yaml_ / _jinja_json_ / _jinja_
@@ -53,7 +55,7 @@ Live Python objects
 JinjaTemplate(...)(**kwargs)          ← template.py: render final output
 ```
 
-Every import/attribute access in this pipeline passes through `utils/security.py`.
+Every import and attribute access in this pipeline goes through `utils/base.py`.
 
 ## Custom Pattern Extension
 
@@ -149,7 +151,7 @@ Three subsystems each have a module-level settings dataclass instance mutated by
 
 | Subsystem      | Settings class     | Function               | File                |
 | -------------- | ------------------ | ---------------------- | ------------------- |
-| Security       | `SecuritySettings` | `configure_security()` | `utils/security.py` |
+| Security       | `SecuritySettings` | `configure_security()` | `utils/base.py`     |
 | Specifier      | `SpecSettings`     | `configure_spec()`     | `core/specifier.py` |
 | Jinja/Template | `JinjaSettings`    | `configure_jinja()`    | `core/template.py`  |
 
@@ -157,12 +159,13 @@ Three subsystems each have a module-level settings dataclass instance mutated by
 
 ## Security Enforcement Rules
 
-All dynamic imports flow through `utils/security.py → import_from_address()`:
+**Trust model**: config is trusted input. There is no module allowlist or blocklist — `import_from_address("os.system")` succeeds and a YAML `!subprocess.Popen` tag imports that address on demand. Anyone who can supply a config can run code in the host process.
 
-1. **Blocklist** — `DEFAULT_BLOCKED_MODULES` in `utils/constants.py` blocks `os`, `subprocess`, `sys`, `pickle`, `socket`, `ctypes`, `importlib`, `pathlib`, `io`, `inspect`, `threading`, `multiprocessing`, `structcast.utils`, and more.
-2. **Allowlist** — `DEFAULT_ALLOWED_MODULES` whitelists specific safe members of `builtins`, `collections`, `datetime`, `math`, `json`, `functools`, `itertools`, `operator`, `string`, `base64`, `enum`, `uuid`, `decimal`, `random`, `secrets`, `html`, `urllib.parse`, `ipaddress`, `time`, `structcast.utils.base`.
-3. **Attribute checks** — `DEFAULT_DANGEROUS_DUNDERS` blocks `__subclasses__`, `__bases__`, `__globals__`, `__code__`, `__dict__`, `__class__`, `__mro__`, `__init__`, `__import__`. Protected (`_foo`) and private (`__foo`) members blocked by default.
-4. **Path checks** — hidden directory detection, working directory containment, `.py`-only module loading.
+All dynamic imports flow through `utils/base.py → import_from_address()`, which enforces:
+
+1. **Module path format** — each dotted part must be a Python identifier and must not be a dangerous dunder. Ordinary private module paths such as `numpy._core` are allowed.
+2. **Attribute checks** — the target half of the address, and every `_attr_` path, go through `validate_attribute()`. `DEFAULT_DANGEROUS_DUNDERS` blocks `__subclasses__`, `__bases__`, `__globals__`, `__code__`, `__dict__`, `__class__`, `__mro__`, `__init__`, `__import__`. Non-ASCII, protected (`_foo`) and private (`__foo`) names are blocked by default and can be relaxed per call or globally.
+3. **Module file loading** — `module_file` is resolved with `find_path()` (searching directories registered via `register_dir()`) and must have a `.py` suffix.
 
 **Rule**: Never bypass `import_from_address()` for any dynamic import.
 
