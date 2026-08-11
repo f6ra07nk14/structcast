@@ -24,7 +24,7 @@ from structcast.core.instantiator import (
     register_pattern,
     validate_pattern_result,
 )
-from structcast.utils.security import SecurityError
+from structcast.utils.base import SecurityError
 from tests.utils import temporary_registered_dir
 
 # ============================================================================

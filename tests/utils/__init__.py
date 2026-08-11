@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
-from structcast.utils.security import configure_security, register_dir, unregister_dir
+from structcast.utils.base import configure_security, register_dir, unregister_dir
 
 
 @contextmanager
