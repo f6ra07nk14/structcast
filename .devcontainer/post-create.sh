@@ -63,7 +63,10 @@ if [ -s "$HOME/.nvm/nvm.sh" ]; then
 
   # Non-interactive shells do not load the .bashrc nvm block, so expose the
   # active nvm tools through a directory already present in the image PATH.
-  for tool in node npm npx corepack claude; do
+  # claude is deliberately absent: the native installer already puts its
+  # launcher in ~/.local/bin, so relinking it here would point the symlink at
+  # itself and break the command.
+  for tool in node npm npx corepack; do
     tool_path="$(command -v "$tool" || true)"
     if [ -n "$tool_path" ]; then
       ln -sfn "$tool_path" "$HOME/.local/bin/$tool"

@@ -91,7 +91,7 @@ Host *
 EOF
 
 RUN mkdir -p /home/vscode/.cache/uv /home/vscode/.codex /home/vscode/.claude /home/vscode/.local/bin /home/vscode/.local/share/uv /commandhistory "$CODEX_STANDALONE_HOME" \
-    && chown -R vscode:vscode /home/vscode/.cache/uv /home/vscode/.codex /home/vscode/.claude /home/vscode/.local /commandhistory "$CODEX_STANDALONE_HOME"
+    && chown -R vscode:vscode /home/vscode/.cache /home/vscode/.codex /home/vscode/.claude /home/vscode/.local /commandhistory "$CODEX_STANDALONE_HOME"
 
 USER vscode
 
@@ -99,19 +99,7 @@ RUN curl -fsSL "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/inst
 
 RUN bash -lc ". \"$NVM_DIR/nvm.sh\" && nvm install \"$NODE_VERSION\" && nvm alias default \"$NODE_VERSION\" && nvm use default && corepack enable"
 
-# Installed via npm (not $CLAUDE_HOME) so the binary is baked into the image
-# layer and survives the ~/.claude bind mount, which only overlays config at
-# container runtime, not build time.
-RUN bash -lc ". \"$NVM_DIR/nvm.sh\" && npm install -g @anthropic-ai/claude-code"
-
-RUN bash -lc '. "$NVM_DIR/nvm.sh" \
-    && nvm use default >/dev/null \
-    && for tool in node npm npx corepack claude; do \
-      tool_path="$(command -v "$tool" || true)"; \
-      if [ -n "$tool_path" ]; then \
-        ln -sfn "$tool_path" "$HOME/.local/bin/$tool"; \
-      fi; \
-    done'
+RUN curl -fsSL https://claude.ai/install.sh | bash
 
 # Install the Codex executable payload outside $CODEX_HOME. $CODEX_HOME is
 # bind-mounted at runtime for auth/config, so anything installed there during
