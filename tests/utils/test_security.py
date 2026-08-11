@@ -1,15 +1,19 @@
 """Tests for security features in import_from_address."""
 
+import collections
+from concurrent.futures import Future
 from dataclasses import dataclass
 from datetime import date, datetime
 from io import StringIO
 import math
+import os
 from pathlib import Path
 from typing import Any, ClassVar
 
 import pytest
+from ruamel.yaml import YAML
+from ruamel.yaml.constructor import ConstructorError
 
-from structcast.utils.constants import DEFAULT_BLOCKED_MODULES
 import structcast.utils.security as security_module
 from structcast.utils.security import (
     SecurityError,
@@ -19,6 +23,7 @@ from structcast.utils.security import (
     get_security_settings,
     import_from_address,
     load_yaml,
+    load_yaml_from_stream,
     register_dir,
     resolve_path,
     unregister_dir,
@@ -66,13 +71,6 @@ class YAMLDumpCustomToYamlClass:
     def to_yaml(representer: Any, data: Any) -> Any:
         """Serialize object to custom scalar."""
         return representer.represent_scalar("!custom.scalar", data.value)
-
-
-@dataclass
-class _YAMLProtectedClass:
-    """Protected-name class to trigger validate_attribute checks."""
-
-    value: str
 
 
 class TestRegisterDir:
@@ -133,14 +131,13 @@ class TestCheckPath:
 
     def test_check_path_tmp_path(self, tmp_path: Path) -> None:
         """Test check_path with Path object."""
-        with pytest.raises(SecurityError, match="Path is outside of allowed directories"):
-            check_path(tmp_path)
+        assert check_path(tmp_path) == tmp_path.resolve()
 
     def test_check_path_with_string_path(self, tmp_path: Path) -> None:
         """Test check_path with string path."""
         test_file = tmp_path / "test.txt"
         test_file.write_text("test")
-        assert check_path(str(test_file), working_dir_check=False) == test_file.resolve()
+        assert check_path(str(test_file)) == test_file.resolve()
 
     def test_check_path_nonexistent_file(self, tmp_path: Path) -> None:
         """Test check_path with non-existent file raises FileNotFoundError."""
@@ -155,32 +152,20 @@ class TestCheckPath:
             assert check_path("test.txt").name == "test.txt"
 
     def test_check_path_with_hidden_directory(self, tmp_path: Path) -> None:
-        """Test check_path blocks hidden directories."""
+        """Test check_path resolves paths inside hidden directories."""
         hidden_dir = tmp_path / ".hidden"
         hidden_dir.mkdir()
         test_file = hidden_dir / "test.txt"
         test_file.write_text("test")
-        with pytest.raises(SecurityError, match="hidden directories"):
-            check_path(test_file, hidden_check=True, working_dir_check=False)
+        assert check_path(test_file) == test_file.resolve()
 
-    def test_check_path_with_hidden_check_disabled(self, tmp_path: Path) -> None:
-        """Test check_path allows hidden directories when check is disabled."""
-        hidden_dir = tmp_path / ".hidden"
-        hidden_dir.mkdir()
-        test_file = hidden_dir / "test.txt"
-        test_file.write_text("test")
-        assert check_path(test_file, hidden_check=False, working_dir_check=False) == test_file.resolve()
-
-    def test_check_path_outside_allowed_directories(self, tmp_path: Path) -> None:
-        """Test check_path blocks paths outside allowed directories."""
-        # Create a file outside the current working directory
+    def test_check_path_outside_working_directory(self, tmp_path: Path) -> None:
+        """Test check_path resolves paths outside the working directory."""
         outside_dir = tmp_path / "outside"
         outside_dir.mkdir()
         test_file = outside_dir / "test.txt"
         test_file.write_text("test")
-        # This might pass or fail depending on the system setup
-        # The test verifies the working_dir_check parameter works
-        assert check_path(test_file, working_dir_check=False) == test_file.resolve()
+        assert check_path(test_file) == test_file.resolve()
 
 
 class TestImportFromAddress:
@@ -193,9 +178,8 @@ class TestImportFromAddress:
 
     def test_import_nonexistent_target(self) -> None:
         """Test importing non-existent target raises ImportError."""
-        with configure_security_context(allowed_modules={"builtins": {None}}):
-            with pytest.raises(ImportError, match="not found"):
-                import_from_address("nonexistent_function_xyz")
+        with pytest.raises(ImportError, match="not found"):
+            import_from_address("nonexistent_function_xyz")
 
     def test_import_with_module_spec_none(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test import when module spec is None."""
@@ -207,7 +191,7 @@ class TestImportFromAddress:
         test_file.write_text("value = 42")
         monkeypatch.setitem(import_from_address.__globals__, "spec_from_file_location", mock_spec)
         with pytest.raises(ImportError, match="Cannot load module"):
-            import_from_address("value", module_file=test_file, working_dir_check=False)
+            import_from_address("value", module_file=test_file)
 
 
 class TestLoadYAML:
@@ -264,39 +248,7 @@ array:
 
 
 class TestSecurityBlocking:
-    """Test that dangerous imports are blocked by default."""
-
-    def test_block_os_module(self) -> None:
-        """Test that os module is blocked."""
-        with configure_security_context(allowed_modules={}):
-            with pytest.raises(SecurityError, match="os.system"):
-                import_from_address("os.system")
-
-    def test_block_subprocess_module(self) -> None:
-        """Test that subprocess module is blocked."""
-        with configure_security_context(allowed_modules={}):
-            with pytest.raises(SecurityError, match="subprocess.run"):
-                import_from_address("subprocess.run")
-
-    def test_block_eval_builtin(self) -> None:
-        """Test that eval builtin is blocked."""
-        with pytest.raises(SecurityError, match="eval"):
-            import_from_address("eval")
-
-    def test_block_exec_builtin(self) -> None:
-        """Test that exec builtin is blocked."""
-        with pytest.raises(SecurityError, match="exec"):
-            import_from_address("exec")
-
-    def test_block_compile_builtin(self) -> None:
-        """Test that compile builtin is blocked."""
-        with pytest.raises(SecurityError, match="compile"):
-            import_from_address("compile")
-
-    def test_block_open_builtin(self) -> None:
-        """Test that open builtin is blocked."""
-        with pytest.raises(SecurityError, match="open"):
-            import_from_address("open")
+    """Test that dangerous dunder targets are blocked by default."""
 
     def test_block_import_builtin(self) -> None:
         """Test that __import__ builtin is blocked."""
@@ -315,65 +267,6 @@ class TestSecurityAllowedImports:
         assert import_from_address("dict") is dict
 
 
-class TestSecurityConfiguration:
-    """Test security configuration options."""
-
-    def test_custom_blocked_modules(self) -> None:
-        """Test custom blocked modules."""
-        with configure_security_context(allowed_modules={}, blocked_modules={"json"}):
-            with pytest.raises(SecurityError, match="json.loads"):
-                import_from_address("json.loads")
-
-    def test_custom_blocked_builtins(self) -> None:
-        """Test custom blocked builtins."""
-        with configure_security_context(allowed_modules={"builtins": None}, blocked_modules={"builtins"}):
-            with pytest.raises(SecurityError, match="int"):
-                import_from_address("int")
-
-    def test_allowlist_mode(self) -> None:
-        """Test allowlist mode."""
-        with configure_security_context(allowed_modules={"math": {None}}):
-            assert import_from_address("math.sqrt") is math.sqrt
-
-            with pytest.raises(SecurityError, match="json.loads"):
-                import_from_address("json.loads")
-
-
-class TestSecurityEdgeCases:
-    """Test edge cases in security checks."""
-
-    def test_nested_module_blocking(self) -> None:
-        """Test that nested modules are blocked if base is blocked."""
-        with pytest.raises(SecurityError, match="os"):
-            import_from_address("os.path.join")
-
-    def test_error_message_includes_blocked_module(self) -> None:
-        """Test that error message is informative."""
-        with configure_security_context(allowed_modules={}):
-            with pytest.raises(SecurityError) as exc_info:
-                import_from_address("subprocess.Popen")
-        assert "subprocess" in str(exc_info.value)
-        assert "blocked" in str(exc_info.value).lower()
-
-    def test_error_message_includes_blocked_builtin(self) -> None:
-        """Test that error message is informative for builtins."""
-        with pytest.raises(SecurityError) as exc_info:
-            import_from_address("eval")
-
-        assert "eval" in str(exc_info.value)
-        assert "blocked" in str(exc_info.value).lower()
-
-
-class TestDefaultSecuritySettings:
-    """Test default security settings."""
-
-    def test_default_blocked_modules_not_empty(self) -> None:
-        """Test that default blocked modules is not empty."""
-        assert len(DEFAULT_BLOCKED_MODULES) > 0
-        assert "os" in DEFAULT_BLOCKED_MODULES
-        assert "subprocess" in DEFAULT_BLOCKED_MODULES
-
-
 class TestFileLoadingSecurity:
     """Test security improvements for file loading."""
 
@@ -382,15 +275,13 @@ class TestFileLoadingSecurity:
         txt_file = tmp_path / "test.txt"
         txt_file.write_text("print('hello')")
         with pytest.raises(SecurityError, match="Module file must be a .py file"):
-            import_from_address("test", module_file=txt_file, working_dir_check=False)
+            import_from_address("test", module_file=txt_file)
 
     def test_resolve_absolute_paths(self, tmp_path: Path) -> None:
         """Test that paths are resolved to absolute paths."""
         py_file = tmp_path / "test_module.py"
         py_file.write_text("value = 42")
-        # Should work with absolute path when module is allowed
-        with configure_security_context(allowed_modules={"test_module": {None}}):
-            assert import_from_address("value", module_file=py_file, working_dir_check=False) == 42
+        assert import_from_address("value", module_file=py_file) == 42
 
 
 class TestPathResolutionErrors:
@@ -429,23 +320,16 @@ class TestPathResolutionErrors:
 def test_configure_security_with_settings_object() -> None:
     """Test configure_security with SecuritySettings object."""
     configure_security(
-        blocked_modules={"custom_module"},
-        allowed_modules={"math": {None}},
-        dangerous_dunders={},
+        dangerous_dunders={"__custom_dunder__"},
         ascii_check=False,
         protected_member_check=False,
         private_member_check=False,
-        hidden_check=False,
-        working_dir_check=False,
     )
     res = get_security_settings()
-    assert res.blocked_modules == {"custom_module"}
-    assert res.allowed_modules == {"math": {None}}
+    assert res.dangerous_dunders == {"__custom_dunder__"}
     assert not res.ascii_check
     assert not res.protected_member_check
     assert not res.private_member_check
-    assert not res.hidden_check
-    assert not res.working_dir_check
     configure_security()
 
 
@@ -506,48 +390,32 @@ class TestDumpYaml:
     def test_dump_yaml_custom_object_uses_default_tag(self) -> None:
         """Test dump_yaml uses default module/class YAML tag for object types."""
         test_module = "tests.utils.test_security"
-        with configure_security_context(allowed_modules={test_module: {"YAMLDumpDefaultTagClass"}}):
-            stream = StringIO()
-            dump_yaml({"obj": YAMLDumpDefaultTagClass("value")}, stream)
-            content = stream.getvalue()
-            assert f"!{test_module}.YAMLDumpDefaultTagClass" in content
+        stream = StringIO()
+        dump_yaml({"obj": YAMLDumpDefaultTagClass("value")}, stream)
+        assert f"!{test_module}.YAMLDumpDefaultTagClass" in stream.getvalue()
 
     def test_dump_yaml_custom_object_uses_yaml_tag_attribute(self) -> None:
         """Test dump_yaml uses yaml_tag when class defines it."""
-        test_module = "tests.utils.test_security"
-        with configure_security_context(allowed_modules={test_module: {"YAMLDumpCustomTagClass"}}):
-            stream = StringIO()
-            dump_yaml({"obj": YAMLDumpCustomTagClass("value")}, stream)
-            assert "!custom.yaml.tag" in stream.getvalue()
+        stream = StringIO()
+        dump_yaml({"obj": YAMLDumpCustomTagClass("value")}, stream)
+        assert "!custom.yaml.tag" in stream.getvalue()
 
     def test_dump_yaml_custom_object_uses_to_yaml_method(self) -> None:
         """Test dump_yaml uses class to_yaml method when provided."""
-        test_module = "tests.utils.test_security"
-        with configure_security_context(allowed_modules={test_module: {"YAMLDumpCustomToYamlClass"}}):
-            stream = StringIO()
-            dump_yaml({"obj": YAMLDumpCustomToYamlClass("serialized")}, stream)
-            content = stream.getvalue()
-            assert "!custom.scalar" in content
-            assert "serialized" in content
-
-    def test_dump_yaml_rejects_protected_class_name_by_default(self) -> None:
-        """Test dump_yaml blocks class names that violate attribute checks."""
-        test_module = "tests.utils.test_security"
-        with configure_security_context(allowed_modules={test_module: {"_YAMLProtectedClass"}}):
-            stream = StringIO()
-            with pytest.raises(SecurityError, match="Protected member access attempt"):
-                dump_yaml({"obj": _YAMLProtectedClass("value")}, stream)
+        stream = StringIO()
+        dump_yaml({"obj": YAMLDumpCustomToYamlClass("serialized")}, stream)
+        content = stream.getvalue()
+        assert "!custom.scalar" in content
+        assert "serialized" in content
 
 
 def test_yaml_manager_load_representer_with_string_address() -> None:
     """Test load_representer string-address path builds the expected tag."""
-    test_module = "tests.utils.test_security"
-    address = f"{test_module}.YAMLDumpDefaultTagClass"
+    address = "tests.utils.test_security.YAMLDumpDefaultTagClass"
     manager = security_module.dump_yaml.__globals__["_YamlManager"]()
-    with configure_security_context(allowed_modules={test_module: {"YAMLDumpDefaultTagClass"}}):
-        manager.load_representer(None, {address})
-        stream = StringIO()
-        manager.instance.dump(YAMLDumpDefaultTagClass("value"), stream)
+    manager.load_representer(None, {address})
+    stream = StringIO()
+    manager.instance.dump(YAMLDumpDefaultTagClass("value"), stream)
     assert f"!{address}" in stream.getvalue()
 
 
@@ -575,22 +443,62 @@ class TestValidateAttributeEdgeCases:
         validate_attribute("__private", private_member_check=False)
 
 
-def test_load_yaml_with_custom_constructor_via_configure_security(tmp_path: Path) -> None:
-    """Test that load_yaml uses add_constructor for allowed modules via configure_security."""
-    # Configure security to allow our test class
-    test_module = "tests.utils.test_security"
-    with configure_security_context(allowed_modules={test_module: {"YAMLTestClass"}}):
-        yaml_file = tmp_path / "test_constructor.yaml"
-        # Create YAML with custom tag
-        yaml_content = f"""\
-test_obj: !{test_module}.YAMLTestClass
-  name: test_name
-  value: 42
-"""
-        yaml_file.write_text(yaml_content)
-        with temporary_registered_dir(tmp_path):
-            result = load_yaml(yaml_file)
-            # Verify the constructor was used and from_yaml was called
-            assert isinstance(result["test_obj"], YAMLTestClass)
-            assert result["test_obj"].name == "test_name"
-            assert result["test_obj"].value == 42
+class TestYamlAddressConstructor:
+    """Test that "!<address>" tags are resolved on demand, without registering the class first."""
+
+    def test_round_trip_uses_from_yaml_without_configuration(self, tmp_path: Path) -> None:
+        """Test a dumped object is reconstructed from its address tag with zero configuration."""
+        yaml_file = tmp_path / "round_trip.yaml"
+        yaml_file.touch()  # dump_yaml resolves the target path, so it has to exist first
+        dump_yaml({"obj": YAMLTestClass(name="test_name", value=42)}, yaml_file)
+        result = load_yaml(yaml_file)
+        assert isinstance(result["obj"], YAMLTestClass)
+        assert result["obj"].name == "test_name"
+        assert result["obj"].value == 42
+
+    def test_round_trip_without_from_yaml_uses_default_construction(self) -> None:
+        """Test a class without from_yaml is reconstructed through the default object constructor."""
+        stream = StringIO()
+        dump_yaml({"obj": YAMLDumpDefaultTagClass("value")}, stream)
+        result = load_yaml_from_stream(stream.getvalue())
+        assert result["obj"] == YAMLDumpDefaultTagClass("value")
+
+    def test_unknown_address_raises_import_error(self) -> None:
+        """Test a tag whose address cannot be imported fails loudly instead of being ignored."""
+        with pytest.raises(ImportError):
+            load_yaml_from_stream("obj: !no.such.module.Cls {}\n")
+
+    def test_registration_does_not_leak_into_foreign_yaml_instances(self) -> None:
+        """Test address resolution stays inside structcast, since ruamel registers multi-constructors per class."""
+        load_yaml_from_stream("obj: 1\n")  # ensure the constructor has been registered
+        with pytest.raises(ConstructorError):
+            YAML(typ="safe", pure=True).load("obj: !os.system {}\n")
+
+
+class TestImportTargetValidation:
+    """Test that import_from_address validates the target, treating the module path as trusted input."""
+
+    def test_module_path_is_trusted(self) -> None:
+        """Test module paths are no longer gated, since configuration is trusted input."""
+        assert import_from_address("os.system") is os.system
+
+    def test_module_path_with_underscore_part_is_allowed(self) -> None:
+        """Test protected/private checks do not apply to module path parts."""
+        assert import_from_address("concurrent.futures._base.Future") is Future
+
+    def test_dangerous_dunder_target_is_blocked(self) -> None:
+        """Test dangerous dunders remain blocked, as they escape the imported object."""
+        with pytest.raises(SecurityError, match="__import__"):
+            import_from_address("builtins.__import__")
+
+    def test_protected_target_is_blocked_by_default(self) -> None:
+        """Test the target is an attribute access, so protected members stay blocked unless opted out."""
+        with pytest.raises(SecurityError, match="Protected member"):
+            import_from_address("collections._count_elements")
+        target = import_from_address("collections._count_elements", protected_member_check=False)
+        assert target is collections._count_elements
+
+    def test_protected_target_follows_global_settings(self) -> None:
+        """Test target validation honours the globally configured checks, not just the keyword arguments."""
+        with configure_security_context(protected_member_check=False):
+            assert import_from_address("collections._count_elements") is collections._count_elements
