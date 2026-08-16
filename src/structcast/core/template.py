@@ -321,6 +321,7 @@ def _resolve_jinja_pattern(
         raise SpecError(f"Multiple Jinja template aliases found in mapping: {raw}")
     find_jinja_group = ALIAS_JINJA_GROUP in raw
     find_jinja_pipe = ALIAS_JINJA_PIPE in raw
+    cls: type[JinjaTemplate]
     if find_jinja_yaml:
         alias, cls = ALIAS_JINJA_YAML, JinjaYamlTemplate
     elif find_jinja_json:

@@ -1,7 +1,7 @@
 """Module for specification conversion and resolver registration."""
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from copy import copy, deepcopy
 from enum import Enum
 from functools import cached_property, partial
@@ -28,7 +28,6 @@ from structcast.core.exceptions import SpecError
 from structcast.core.instantiator import ObjectPattern
 from structcast.utils.base import (
     SecurityError,
-    check_elements,
     convert_part_to_string,
     convert_parts_to_string,
     split_attribute,
@@ -261,12 +260,12 @@ def _return_value(data: Any, *, return_type: ReturnType) -> Any:
 
 def _access_default(
     data: Any,
-    source: tuple[Union[int, str], ...],
+    source: Sequence[Union[int, str]],
     return_type: ReturnType,
-    accessers: list[tuple[type, Callable[[Any, Union[str, int]], tuple[bool, Any]]]],
+    accessers: Sequence[tuple[type[Any], Callable[[Any, Union[str, int]], tuple[bool, Any]]]],
     raise_error: bool,
 ) -> Any:
-    def _access(target: Any, indices: tuple[Union[int, str], ...]) -> Any:
+    def _access(target: Any, indices: Sequence[Union[int, str]]) -> Any:
         if not indices:
             return target
         index, indices = indices[0], indices[1:]
@@ -305,7 +304,7 @@ def _access_default(
 
 
 def _access_basemodel(instance: BaseModel, index: Union[str, int]) -> tuple[bool, Any]:
-    if index in instance.model_fields_set:
+    if isinstance(index, str) and index in instance.model_fields_set:
         return True, instance.model_dump(include={index})[index]
     return False, None
 
@@ -323,27 +322,27 @@ def _access_attribute(instance: Any, index: Union[str, int]) -> tuple[bool, Any]
 
 def access(
     data: Any,
-    source: tuple[Union[int, str], ...],
+    source: Sequence[Union[int, str]],
     *,
     return_type: Optional[ReturnType] = None,
     support_basemodel: Optional[bool] = None,
     support_attribute: Optional[bool] = None,
-    accessers: Optional[list[tuple[type, Callable[[Any, Union[str, int]], tuple[bool, Any]]]]] = None,
+    accessers: Optional[Sequence[tuple[type[Any], Callable[[Any, Union[str, int]], tuple[bool, Any]]]]] = None,
     raise_error: Optional[bool] = None,
 ) -> Any:
     """Access a value from data based on the provided source path.
 
     Args:
         data (Any): The data to access.
-        source (tuple[int | str, ...]): The path to access within the data.
+        source (Sequence[int | str]): The path to access within the data.
         return_type (ReturnType | None, optional): The type of access to use.
             Default is taken from global settings.
         support_basemodel (bool | None, optional): Whether to support BaseModel access.
             Default is taken from global settings.
         support_attribute (bool | None, optional): Whether to support attribute access on objects.
             Default is taken from global settings.
-        accessers (list[tuple[type, Callable[[Any, int | str], tuple[bool, Any]]]] | None, optional):
-            A custom list of type-accesser pairs to use for accessing data.
+        accessers (Sequence[tuple[type, Callable[[Any, int | str], tuple[bool, Any]]]] | None, optional):
+            A custom sequence of type-accesser pairs to use for accessing data.
             Each accesser is a callable that takes an instance and an index,
             and returns a tuple of success (bool) and value (Any). Default is taken from global settings.
         raise_error (bool | None, optional): Whether to raise an error when access fails.
@@ -360,9 +359,9 @@ def access(
     support_attribute = _spec_settings.support_attribute if support_attribute is None else support_attribute
     support_basemodel = _spec_settings.support_basemodel if support_basemodel is None else support_basemodel
     if support_attribute:
-        accessers = [(object, _access_attribute)] + accessers
+        accessers = [(object, _access_attribute), *accessers]
     if support_basemodel:
-        accessers = [(BaseModel, _access_basemodel)] + accessers
+        accessers = [(BaseModel, _access_basemodel), *accessers]
     raise_error = _spec_settings.raise_error if raise_error is None else raise_error
     return _access_default(data, source, return_type, accessers, raise_error)
 
@@ -375,7 +374,7 @@ def construct(
     support_basemodel: Optional[bool] = None,
     support_attribute: Optional[bool] = None,
     support_object_pattern: Optional[bool] = None,
-    accessers: Optional[list[tuple[type, Callable[[Any, Union[str, int]], tuple[bool, Any]]]]] = None,
+    accessers: Optional[Sequence[tuple[type[Any], Callable[[Any, Union[str, int]], tuple[bool, Any]]]]] = None,
     raise_error: Optional[bool] = None,
 ) -> Any:
     """Construct a value from data based on the structured specification.
@@ -391,8 +390,8 @@ def construct(
             Default is taken from global settings.
         support_object_pattern (bool | None, optional): Whether to support object pattern matching for construction.
             Default is taken from global settings.
-        accessers (list[tuple[type, Callable[[Any, int | str], tuple[bool, Any]]]] | None, optional):
-            A custom list of type-accesser pairs to use for accessing data.
+        accessers (Sequence[tuple[type, Callable[[Any, int | str], tuple[bool, Any]]]] | None, optional):
+            A custom sequence of type-accesser pairs to use for accessing data.
             Each accesser is a callable that takes an instance and an index,
             and returns a tuple of success (bool) and value (Any). Default is taken from global settings.
         raise_error (bool | None, optional): Whether to raise an error when access fails.
@@ -440,6 +439,9 @@ def construct(
 _ALIAS_SPEC = "_spec_"
 _ALIAS_PIPE = "_pipe_"
 
+_PIPE_SINGLE_ADAPTER = TypeAdapter(ObjectPattern)
+_PIPE_LIST_ADAPTER = TypeAdapter(list[ObjectPattern])
+
 
 def _casting(value: Any, *, pipe: list[Callable[[Any], Any]]) -> Any:
     for call in pipe:
@@ -457,7 +459,12 @@ class WithPipe(Serializable):
     @classmethod
     def _validate_pipe(cls, pipe: Any) -> list[ObjectPattern]:
         """Validate the pipe field."""
-        return check_elements(TypeAdapter(Optional[Union[ObjectPattern, list[ObjectPattern]]]).validate_python(pipe))
+        if pipe is None:
+            return []
+        try:
+            return [_PIPE_SINGLE_ADAPTER.validate_python(pipe)]
+        except ValidationError:
+            return _PIPE_LIST_ADAPTER.validate_python(pipe)
 
     @model_validator(mode="after")
     def _validate_casting(self) -> Self:
@@ -627,7 +634,7 @@ class RawSpec(_Spec):
 class ObjectSpec(_Spec):
     """Object specification for constructing values from data based on an object pattern."""
 
-    pattern: ObjectPattern = Field(default_factory=ObjectPattern, alias=_ALIAS_SPEC)
+    pattern: ObjectPattern = Field(alias=_ALIAS_SPEC)
     """The object pattern specification."""
 
     @model_validator(mode="before")

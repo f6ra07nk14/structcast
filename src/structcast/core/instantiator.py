@@ -63,10 +63,10 @@ class BasePattern(Serializable, ABC):
         """
 
 
-_patterns: list[BasePattern] = []
+_patterns: list[type[BasePattern]] = []
 
 
-def register_pattern(ptn: BasePattern) -> None:
+def register_pattern(ptn: type[BasePattern]) -> None:
     """Register a pattern for instantiation."""
     _patterns.append(ptn)
 
