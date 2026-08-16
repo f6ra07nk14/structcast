@@ -74,9 +74,9 @@ def test_convert_spec_invalid_format() -> None:
 def test_access() -> None:
     """Test access."""
     data = {"a": [{"b": [{"c": 1}]}]}
-    assert access(data, ["a", 0, "b", 0, "c"]) == 1
-    assert access(data, ["a", 1]) is None
-    assert access(data, ["a", "a"]) is None
+    assert access(data, ("a", 0, "b", 0, "c")) == 1
+    assert access(data, ("a", 1)) is None
+    assert access(data, ("a", "a")) is None
 
 
 def test_access_basemodel_returns_dumped_value() -> None:

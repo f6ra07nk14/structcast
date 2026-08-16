@@ -322,7 +322,7 @@ def _access_attribute(instance: Any, index: Union[str, int]) -> tuple[bool, Any]
 
 def access(
     data: Any,
-    source: Sequence[Union[int, str]],
+    source: tuple[Union[int, str], ...],
     *,
     return_type: Optional[ReturnType] = None,
     support_basemodel: Optional[bool] = None,
@@ -334,7 +334,7 @@ def access(
 
     Args:
         data (Any): The data to access.
-        source (Sequence[int | str]): The path to access within the data.
+        source (tuple[int | str, ...]): The path to access within the data.
         return_type (ReturnType | None, optional): The type of access to use.
             Default is taken from global settings.
         support_basemodel (bool | None, optional): Whether to support BaseModel access.
