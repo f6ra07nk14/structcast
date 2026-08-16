@@ -60,7 +60,6 @@ addopts = """\
 testpaths = ["tests/", "src/structcast/"]
 
 [tool.mypy]
-python_version = "3.9"
 disallow_untyped_defs = true
 plugins = ["pydantic.mypy"]
 
