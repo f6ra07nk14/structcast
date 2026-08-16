@@ -13,6 +13,8 @@ from pydantic import (
     BaseModel,
     Field,
     FilePath,
+    SerializationInfo,
+    SerializeAsAny,
     SerializerFunctionWrapHandler,
     TypeAdapter,
     ValidationError,
@@ -63,10 +65,10 @@ class BasePattern(Serializable, ABC):
         """
 
 
-_patterns: list[BasePattern] = []
+_patterns: list[type[BasePattern]] = []
 
 
-def register_pattern(ptn: BasePattern) -> None:
+def register_pattern(ptn: type[BasePattern]) -> None:
     """Register a pattern for instantiation."""
     _patterns.append(ptn)
 
@@ -263,6 +265,10 @@ class BindPattern(BasePattern):
         raise InstantiationError(msg)
 
 
+_PATTERNS_SERIALIZER = TypeAdapter(list[SerializeAsAny[BasePattern]])
+"""Serializer for validated pattern lists that dumps each element by its runtime class."""
+
+
 class ObjectPattern(BasePattern):
     """Pattern for creating objects."""
 
@@ -285,10 +291,19 @@ class ObjectPattern(BasePattern):
         _ = self.patterns
         return self
 
-    @model_serializer(mode="wrap")
-    def _serialize_model(self, handler: SerializerFunctionWrapHandler) -> list[Any]:
+    @model_serializer(mode="plain")
+    def _serialize_model(self, info: SerializationInfo) -> list[Any]:
         """Serialize the model."""
-        return ["_obj_"] + handler(self.patterns)
+        return ["_obj_"] + _PATTERNS_SERIALIZER.dump_python(
+            self.patterns,
+            mode="json" if info.mode_is_json() else "python",
+            by_alias=info.by_alias,
+            exclude_unset=info.exclude_unset,
+            exclude_defaults=info.exclude_defaults,
+            exclude_none=info.exclude_none,
+            round_trip=info.round_trip,
+            context=info.context,
+        )
 
     @cached_property
     def patterns(self) -> list[BasePattern]:

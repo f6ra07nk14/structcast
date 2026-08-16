@@ -211,9 +211,12 @@ class TestJinjaTemplate:
         jt = JinjaTemplate.model_validate({"_jinja_": "{{ x }}"})
         jy = JinjaYamlTemplate.model_validate({"_jinja_yaml_": "k: v"})
         jj = JinjaJsonTemplate.model_validate({"_jinja_json_": '{"k": "v"}'})
-        assert JinjaTemplate._validate_raw(jt) is jt
-        assert JinjaYamlTemplate._validate_raw_with_yaml(jy) is jy
-        assert JinjaJsonTemplate._validate_raw_with_json(jj) is jj
+        validate_jinja: Any = JinjaTemplate._validate_raw
+        validate_yaml: Any = JinjaYamlTemplate._validate_raw_with_yaml
+        validate_json: Any = JinjaJsonTemplate._validate_raw_with_json
+        assert validate_jinja(jt) is jt
+        assert validate_yaml(jy) is jy
+        assert validate_json(jj) is jj
 
     def test_yaml_and_json_template_warn_on_custom_pipe_in_mapping(self, caplog: pytest.LogCaptureFixture) -> None:
         """Test mapping-form custom pipes are ignored with warnings for YAML/JSON templates."""

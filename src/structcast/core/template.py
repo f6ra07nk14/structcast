@@ -321,6 +321,7 @@ def _resolve_jinja_pattern(
         raise SpecError(f"Multiple Jinja template aliases found in mapping: {raw}")
     find_jinja_group = ALIAS_JINJA_GROUP in raw
     find_jinja_pipe = ALIAS_JINJA_PIPE in raw
+    cls: type[JinjaTemplate]
     if find_jinja_yaml:
         alias, cls = ALIAS_JINJA_YAML, JinjaYamlTemplate
     elif find_jinja_json:
@@ -421,7 +422,8 @@ def extend_structure(
             return tmp_d if (cls := type(raw)) is dict else cls(**tmp_d)
         if not isinstance(raw, str) and isinstance(raw, (list, tuple, Sequence)):
             resolved, tmp_l = _resolve_jinja_pattern_in_seq(raw, template_kwargs=t_kw, default=default)
-            return type(raw)(_extend(tmp_l, dep) if resolved else [_extend(v, dep) for v in tmp_l])
+            seq_cls: type[Any] = type(raw)
+            return seq_cls(_extend(tmp_l, dep) if resolved else [_extend(v, dep) for v in tmp_l])
         return raw
 
     return _extend(data, __depth__)
