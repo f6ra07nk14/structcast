@@ -79,6 +79,17 @@ def test_access() -> None:
     assert access(data, ("a", "a")) is None
 
 
+def test_access_rejects_untokenized_source() -> None:
+    """Ensure bare strings and bytes raise instead of silently iterating character by character."""
+    data = {"a": {"b": 2}}
+    bad_source: Any = "a.b"
+    with pytest.raises(TypeError, match="tuple of path parts"):
+        access(data, bad_source)
+    bad_source = b"ab"
+    with pytest.raises(TypeError, match="tuple of path parts"):
+        access(data, bad_source)
+
+
 def test_access_basemodel_returns_dumped_value() -> None:
     """Ensure BaseModel access serializes via model_dump instead of returning raw attributes."""
 

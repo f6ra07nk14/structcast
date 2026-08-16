@@ -353,7 +353,13 @@ def access(
 
     Raises:
         AccessError: If access fails and raise_error is True.
+        TypeError: If source is a bare string or bytes instead of a tuple of path parts.
     """
+    if isinstance(source, (str, bytes)):
+        raise TypeError(
+            f"source must be a tuple of path parts, got {type(source).__name__!r}; "
+            "tokenize it first (e.g. with convert_spec or split_attribute)"
+        )
     return_type = _spec_settings.return_type if return_type is None else return_type
     accessers = _accessers if accessers is None else accessers
     support_attribute = _spec_settings.support_attribute if support_attribute is None else support_attribute
