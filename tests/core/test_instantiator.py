@@ -508,8 +508,10 @@ class TestAttributeAccessAndPatternEdgeCases:
         """Test low-level validators return existing instances unchanged."""
         addr = AddressPattern.model_validate({"_addr_": "list"})
         obj = ObjectPattern.model_validate({"_obj_": [{"_addr_": "list"}]})
-        assert AddressPattern._validate_raw(addr) is addr
-        assert ObjectPattern._validate_raw(obj) is obj
+        validate_addr: Any = AddressPattern._validate_raw
+        validate_obj: Any = ObjectPattern._validate_raw
+        assert validate_addr(addr) is addr
+        assert validate_obj(obj) is obj
 
     def test_call_pattern_serializer_list_and_scalar(self) -> None:
         """Test CallPattern serializer branches for list and scalar call payloads."""
@@ -705,7 +707,7 @@ class TestCustomPatternRegistration:
                 return res_t(patterns=ptns + [self], runs=runs + [new_value], depth=depth, start=start)
 
         # Use monkeypatch to set a clean _patterns list for this test
-        test_patterns: list[BasePattern] = []
+        test_patterns: list[type[BasePattern]] = []
         monkeypatch.setitem(register_pattern.__globals__, "_patterns", test_patterns)
         # Register the custom pattern
         register_pattern(MultiplyPattern)
@@ -745,7 +747,7 @@ class TestCustomPatternRegistration:
                 return res_t(patterns=ptns + [self], runs=runs + [new_value], depth=depth, start=start)
 
         # Use monkeypatch to set a clean _patterns list for this test
-        test_patterns: list[BasePattern] = []
+        test_patterns: list[type[BasePattern]] = []
         monkeypatch.setitem(register_pattern.__globals__, "_patterns", test_patterns)
 
         # Register the custom pattern
@@ -792,7 +794,7 @@ class TestCustomPatternRegistration:
                 return res_t(patterns=ptns + [self], runs=runs + [last], depth=depth, start=start)
 
         # Use monkeypatch to set a clean _patterns list for this test
-        test_patterns: list[BasePattern] = []
+        test_patterns: list[type[BasePattern]] = []
         monkeypatch.setitem(register_pattern.__globals__, "_patterns", test_patterns)
         register_pattern(StrictTypePattern)
         # This should fail type check

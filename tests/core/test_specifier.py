@@ -5,7 +5,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any, Optional, Union
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 import pytest
 
 from structcast.core.constants import SPEC_SOURCE
@@ -77,6 +77,21 @@ def test_access() -> None:
     assert access(data, ["a", 0, "b", 0, "c"]) == 1
     assert access(data, ["a", 1]) is None
     assert access(data, ["a", "a"]) is None
+
+
+def test_access_basemodel_returns_dumped_value() -> None:
+    """Ensure BaseModel access serializes via model_dump instead of returning raw attributes."""
+
+    class Inner(BaseModel):
+        value: int = 1
+
+    class Outer(BaseModel):
+        inner: Inner
+
+    outer = Outer(inner=Inner(value=3))
+    result = access(outer, ("inner",))
+    assert result == {"value": 3}
+    assert not isinstance(result, Inner)
 
 
 class TestConstruct:
@@ -325,7 +340,8 @@ class TestRawSpec:
 
     def test_rawspec_initialization_from_dict(self) -> None:
         """Test RawSpec initialization from dict."""
-        assert RawSpec(**{"_spec_": "a.b.c"}).raw == "a.b.c"
+        data: dict[str, Any] = {"_spec_": "a.b.c"}
+        assert RawSpec(**data).raw == "a.b.c"
 
     def test_rawspec_construct_simple(self) -> None:
         """Test RawSpec construction with simple data."""
@@ -499,7 +515,7 @@ class TestObjectSpec:
 
     def test_objectspec_deferred_constructor_keeps_object_spec_constant(self) -> None:
         """Test ObjectSpec deferred constructor branch when total_depth is greater than zero."""
-        deferred = ObjectSpec.model_validate({"_obj_": [{"_addr_": "list"}]})._constructor(1)
+        deferred: Any = ObjectSpec.model_validate({"_obj_": [{"_addr_": "list"}]})._constructor(1)
         assert callable(deferred)
         assert deferred({"dynamic": "ignored"}) is deferred
         assert deferred.self_depth == -1
@@ -669,11 +685,16 @@ class TestFlexSpec:
         class CustomModel(BaseModel):
             spec: FlexSpec
 
-        assert CustomModel(spec="a.b.c").model_dump() == {"spec": "a.b.c"}
-        assert CustomModel(spec=["a.b.c"]).model_dump() == {"spec": ["a.b.c"]}
-        assert CustomModel(spec=[["a.b.c"]]).model_dump() == {"spec": [["a.b.c"]]}
-        assert CustomModel(spec={"a": "a.b.c"}).model_dump() == {"spec": {"a": "a.b.c"}}
-        assert CustomModel(spec={"a": {"a": "a.b.c"}}).model_dump() == {"spec": {"a": {"a": "a.b.c"}}}
+        raw: Any = "a.b.c"
+        assert CustomModel(spec=raw).model_dump() == {"spec": "a.b.c"}
+        raw = ["a.b.c"]
+        assert CustomModel(spec=raw).model_dump() == {"spec": ["a.b.c"]}
+        raw = [["a.b.c"]]
+        assert CustomModel(spec=raw).model_dump() == {"spec": [["a.b.c"]]}
+        raw = {"a": "a.b.c"}
+        assert CustomModel(spec=raw).model_dump() == {"spec": {"a": "a.b.c"}}
+        raw = {"a": {"a": "a.b.c"}}
+        assert CustomModel(spec=raw).model_dump() == {"spec": {"a": {"a": "a.b.c"}}}
 
     def test_rawspec_placeholder_depth_and_constructor(self) -> None:
         """Test RawSpec placeholder-depth parsing and deferred constructor path."""
@@ -683,27 +704,40 @@ class TestFlexSpec:
     def test_rawspec_validate_and_serializer_fallback(self) -> None:
         """Test RawSpec validator/serializer fallback branches."""
         raw = RawSpec.model_validate("a.b")
-        assert RawSpec._validate_raw(raw) is raw
-        assert raw._serialize_model(lambda _: "serialized") == "serialized"
+        validate_raw: Any = RawSpec._validate_raw
+        assert validate_raw(raw) is raw
+
+        def fake_handler(_value: Any) -> str:
+            return "serialized"
+
+        handler: Any = fake_handler
+        assert raw._serialize_model(handler) == "serialized"
 
     def test_objectspec_validate_and_serializer_fallback(self) -> None:
         """Test ObjectSpec validator/serializer fallback branches."""
         obj = ObjectSpec.model_validate({"_obj_": [{"_addr_": "list"}]})
-        assert ObjectSpec._validate_pattern(obj) is obj
-        assert obj._serialize_model(lambda _: "serialized") == "serialized"
+        validate_pattern: Any = ObjectSpec._validate_pattern
+        assert validate_pattern(obj) is obj
+
+        def fake_handler(_value: Any) -> str:
+            return "serialized"
+
+        handler: Any = fake_handler
+        assert obj._serialize_model(handler) == "serialized"
 
     def test_flexspec_validate_structure_with_alias_key_and_instance(self) -> None:
         """Test FlexSpec validator branches for existing instances and alias-key dictionaries."""
         existing = FlexSpec.model_validate("a.b")
-        assert FlexSpec._validate_structure(existing) is existing
+        validate_structure: Any = FlexSpec._validate_structure
+        assert validate_structure(existing) is existing
 
         alias_data = {"_spec_": {"invalid": "structure"}}
-        assert FlexSpec._validate_structure(alias_data) == alias_data
+        assert validate_structure(alias_data) == alias_data
 
     def test_flexspec_internal_fallback_paths(self, caplog: pytest.LogCaptureFixture) -> None:
         """Test FlexSpec private fallback branches for unsupported structures and deferred constructors."""
         caplog.set_level("DEBUG", logger="structcast.core.specifier")
-        weird = object()
+        weird: Any = object()
         flex = FlexSpec.model_construct(structure=weird, pipe=[])
         assert flex.spec is weird
         assert flex.placeholder_depth == 0
@@ -1051,3 +1085,22 @@ class TestWithPipe:
         # int() returns 0 which is not callable, and this should raise SpecError during validation
         with pytest.raises(SpecError, match="not callable"):
             WithPipe.model_validate({"_pipe_": [{"_obj_": [{"_addr_": "int"}, {"_call_": {}}]}]})
+
+    def test_withpipe_pipe_dispatch(self) -> None:
+        """Test WithPipe normalizes every accepted pipe form and rejects the rest.
+
+        The pipe field accepts a single pattern or a list of patterns; callers rely on `pipe` always being a
+        list whose length matches how many patterns were given, so this pins which inputs collapse to one
+        element, which stay multi-element, and which are refused altogether.
+        """
+        single: dict[str, Any] = {"_obj_": [{"_addr_": "int"}]}
+        instance = ObjectPattern.model_validate(single)
+        for raw, count in ((None, 0), ([], 0), (single, 1), (["_obj_", {"_addr_": "int"}], 1), (instance, 1)):
+            assert [p.object for p in WithPipe.model_validate({"_pipe_": raw}).pipe] == [[{"_addr_": "int"}]] * count
+        for raw_list, count in (([instance], 1), ([single, single], 2)):
+            assert [p.object for p in WithPipe.model_validate({"_pipe_": raw_list}).pipe] == [
+                [{"_addr_": "int"}]
+            ] * count
+        for invalid in ("nope", 5, {"x": 1}):
+            with pytest.raises(ValidationError):
+                WithPipe.model_validate({"_pipe_": invalid})
