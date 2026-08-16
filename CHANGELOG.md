@@ -1,3 +1,37 @@
+## [2.1.0](https://github.com/f6ra07nk14/structcast/compare/v2.0.0...v2.1.0) (2026-08-16)
+
+
+### 👷 Build
+
+* **deps:** upgrade locked dependencies ([cc3397b](https://github.com/f6ra07nk14/structcast/commit/cc3397b255fbcb460e2ba5bd72c7f6c1924a818c))
+
+
+### 📦 Other
+
+* remove import-masking flags from mypy configuration ([30d5cce](https://github.com/f6ra07nk14/structcast/commit/30d5cce1273fbedf1af1325e3a9c28407f62c553))
+* update devcontainer configuration by removing unused variables and scripts ([b1bd361](https://github.com/f6ra07nk14/structcast/commit/b1bd361f81becd5683239507e843b2fcae039fd5))
+
+
+### 💎 Features
+
+* **devcontainer:** add GitHub CLI feature to development container ([72c9463](https://github.com/f6ra07nk14/structcast/commit/72c94636971f25aeb05a16f3af227d79d37c5151))
+
+
+### 🔧 Fixes
+
+* **ci:** drop pinned mypy python_version so per-env interpreters parse dependencies ([3a39fae](https://github.com/f6ra07nk14/structcast/commit/3a39faefeb5bc964409434d867e8633e8a3b5bf3))
+* **core:** annotate sequence reconstruction constructor for mypy 2.x ([168cbcb](https://github.com/f6ra07nk14/structcast/commit/168cbcb47f8b954e8159d8d79d558aa9cfb78340))
+* **core:** correct type errors hidden by mypy site-packages masking ([a4441d1](https://github.com/f6ra07nk14/structcast/commit/a4441d177fe8c345b3f04bb51683dbee668a8b9b))
+* **core:** reject untokenized string sources in access() at runtime ([6c3630d](https://github.com/f6ra07nk14/structcast/commit/6c3630da7cbaf1039fad0dce3861a295bc1a90a5))
+* **core:** restrict access() source to tuples to reject bare strings ([9bac21a](https://github.com/f6ra07nk14/structcast/commit/9bac21a363712831db966b89431665afe2f5fdb1))
+* **core:** serialize validated patterns through a matching adapter ([b7310cb](https://github.com/f6ra07nk14/structcast/commit/b7310cbcf731aec5e00ebb7bf6b27fd720752a89))
+* ship py.typed marker to honor the Typing classifier ([09f9d1f](https://github.com/f6ra07nk14/structcast/commit/09f9d1f048121ff105d5df2904838fc7b23dbac6))
+
+
+### 🚨 Tests
+
+* make type-level intent explicit in private-hook and coercion tests ([fce3608](https://github.com/f6ra07nk14/structcast/commit/fce3608f9888ddfee169438c48433434bc03c8ae))
+
 ## [2.0.0](https://github.com/f6ra07nk14/structcast/compare/v1.5.1...v2.0.0) (2026-08-11)
 
 
