@@ -16,7 +16,6 @@ from typing import IO, TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union, c
 from ruamel.yaml import YAML
 
 from structcast.utils.dataclasses import dataclass
-from structcast.utils.lazy_import import get_default_dir
 from structcast.utils.types import PathLike
 
 logger = getLogger(__name__)
@@ -666,7 +665,6 @@ __all__ = [
     "dump_yaml",
     "dump_yaml_to_string",
     "find_path",
-    "get_default_dir",
     "get_security_settings",
     "import_from_address",
     "load_yaml",
